@@ -1,0 +1,29 @@
+syntax = "proto3";
+package metrics;
+
+option go_package = "../gen";
+
+service MetricsScraper {
+  rpc StreamMetrics(stream NodeSnapshot) returns (Ack);
+}
+
+message NodeSnapshot {
+  string node_name = 1;
+  double cpu_percent = 2;
+  uint64 mem_used = 3;
+  uint64 mem_total = 4;
+  int64 timestamp = 5;
+  repeated ContainerMetrics containers = 6;
+}
+
+message ContainerMetrics {
+  string namespace = 1;
+  string pod_name = 2;
+  string container_name = 3;
+  uint64 cpu_nano_cores = 4;
+  uint64 mem_working_set = 5;
+}
+
+message Ack {
+  bool ok = 1;
+}
