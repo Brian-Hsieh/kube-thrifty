@@ -1,3 +1,9 @@
+// Package informer implements runtime to gather resource information of all nodes in k8s cluster, and serves
+// the information.
+//
+// The informer package should be used in in-cluster settings with functioning inter-node communication,
+// and there should only be one runtime at a given time in cluster.
+// It should be used together with agent package for proper grpc communication in cluster.
 package informer
 
 import (

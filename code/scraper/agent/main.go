@@ -1,3 +1,8 @@
+// Package agent implements runtime to scrape resource information of the node in k8s cluster, and sends
+// scraped information to informer.
+//
+// The agent package should be used in in-cluster settings with functioning inter-node communication.
+// It should be used together with informer package for proper grpc communication in cluster.
 package agent
 
 import (
