@@ -57,7 +57,7 @@ type kubeletClient struct {
 	token   string
 }
 
-func newKubeletClient() (*kubeletClient, error) {
+func newKubeletClient(nodeIP string) (*kubeletClient, error) {
 	hc := &http.Client{
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
@@ -71,7 +71,7 @@ func newKubeletClient() (*kubeletClient, error) {
 
 	return &kubeletClient{
 		hc:      hc,
-		baseURL: "https://localhost:10250",
+		baseURL: "https://" + nodeIP + ":10250",
 		token:   config.BearerToken,
 	}, nil
 }
@@ -150,8 +150,10 @@ func scrape(ctx context.Context, nodeName string, kc *kubeletClient) (*gen.NodeS
 }
 
 func stream(client gen.MetricsScraperClient, nodeName string, kc *kubeletClient) error {
-	ctx := context.Background()
-	s, err := client.StreamMetrics(ctx)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	s, err := client.StreamMetrics(ctx, grpc.WaitForReady(true))
 	if err != nil {
 		return err
 	}
@@ -174,6 +176,7 @@ func stream(client gen.MetricsScraperClient, nodeName string, kc *kubeletClient)
 func main() {
 	addr := os.Getenv("INFORMER_ADDR")
 	nodeName := os.Getenv("NODE_NAME")
+	nodeIP := os.Getenv("NODE_IP")
 
 	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
@@ -182,7 +185,7 @@ func main() {
 	defer conn.Close()
 
 	client := gen.NewMetricsScraperClient(conn)
-	kc, err := newKubeletClient()
+	kc, err := newKubeletClient(nodeIP)
 	if err != nil {
 		log.Fatalf("Critical: failed getting in-cluster config: %v\n", err)
 	}
