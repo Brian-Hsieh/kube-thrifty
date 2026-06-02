@@ -23,6 +23,8 @@ import (
 	"k8s.io/client-go/rest"
 )
 
+const ScrapeInterval = 500 * time.Millisecond
+
 type (
 	kubeletSummary struct {
 		Pods []podStats `json:"pods"`
@@ -158,7 +160,7 @@ func stream(client gen.MetricsScraperClient, nodeName string, kc *kubeletClient)
 		return err
 	}
 
-	ticker := time.NewTicker(500 * time.Millisecond)
+	ticker := time.NewTicker(ScrapeInterval)
 	defer ticker.Stop()
 
 	for range ticker.C {
