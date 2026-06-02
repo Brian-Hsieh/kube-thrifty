@@ -10,7 +10,7 @@ COPY gen/ ./gen/
 COPY informer/main.go ./informer/main.go
 
 
-RUN CGOENABLED=0 GOOS=linux go build -o /informer ./informer
+RUN CGO_ENABLED=0 GOOS=linux go build -o /informer ./informer
 
 # build the application
 FROM gcr.io/distroless/static:nonroot

@@ -3,7 +3,7 @@
 //
 // The agent package should be used in in-cluster settings with functioning inter-node communication.
 // It should be used together with informer package for proper grpc communication in cluster.
-package agent
+package main
 
 import (
 	"context"

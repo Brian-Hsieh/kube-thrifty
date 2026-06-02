@@ -11,7 +11,7 @@ COPY gen/ ./gen/
 COPY agent/main.go ./agent/main.go
 
 
-RUN CGOENABLED=0 GOOS=linux go build -o /agent ./agent
+RUN CGO_ENABLED=0 GOOS=linux go build -o /agent ./agent
 
 # build the application
 FROM gcr.io/distroless/static:nonroot
