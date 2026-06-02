@@ -1,3 +1,8 @@
-image:
-  repo: "kube-thrifty"
-  tag: "v2.0.2"
+agent:
+  image:
+    repo: "kube-thrifty-agent"
+    tag: "v1.0.1"
+informer:
+  image:
+    repo: "kube-thrifty-informer"
+    tag: "v1.0.1"

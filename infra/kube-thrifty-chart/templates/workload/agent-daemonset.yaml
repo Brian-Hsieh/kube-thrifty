@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: "{{ .Release.Name }}-agent-daemonset"
+  namespace: {{ .Release.Namespace }}
+spec:
+  selector:
+    matchLabels:
+      app: "{{ .Release.Name }}-agent"
+  template:
+    metadata:
+      labels:
+        app: "{{ .Release.Name }}-agent"
+    spec:
+      tolerations: # TODO: make this optional in helm
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+      - key: node-role.kubernetes.io/master
+        operator: Exists
+        effect: NoSchedule
+      serviceAccountName: "{{ .Release.Name }}-agent"
+      containers:
+        - name: agent
+          image: "{{ .Values.agent.image.repo }}:{{ .Values.agent.image.tag}}"
+          imagePullPolicy: Never
+          env:
+            - name: INFORMER_ADDR
+              value: "{{ .Release.Name }}-metrics-service.{{ .Release.Namespace }}.svc.cluster.local:50051"
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: NODE_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+          resources:
+            limits:
+              cpu: "100m"
+              memory: "128Mi"
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+

@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: "{{ .Release.Name }}-metrics-service"
+  namespace: {{ .Release.Namespace }}
+spec:
+  selector:
+    app: "{{ .Release.Name }}-informer"
+  ports:
+    - name: grpc
+      port: 50051
+      targetPort: 50051
+    - name: http
+      port: 8080
+      targetPort: 8080
+  type: ClusterIP
+
+
