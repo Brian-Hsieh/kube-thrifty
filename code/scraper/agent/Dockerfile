@@ -14,6 +14,6 @@ COPY agent/main.go ./agent/main.go
 RUN CGO_ENABLED=0 GOOS=linux go build -o /agent ./agent
 
 # build the application
-FROM gcr.io/distroless/static:nonroot
+FROM gcr.io/distroless/static-debian13:nonroot
 COPY --from=builder /agent /agent
 ENTRYPOINT ["/agent"]
