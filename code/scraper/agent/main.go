@@ -13,6 +13,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 
 	"example.com/m/gen"
@@ -20,7 +21,11 @@ import (
 	"github.com/shirou/gopsutil/v3/mem"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/cache"
 )
 
 const ScrapeInterval = 500 * time.Millisecond
@@ -52,6 +57,130 @@ type (
 		WorkingSetBytes uint64 `json:"workingSetBytes"`
 	}
 )
+
+type resourceSpec struct {
+	cpuMilli   int64
+	memoryByte int64
+}
+
+type containerSpec struct {
+	request resourceSpec
+	limit   resourceSpec
+}
+
+type specCache struct {
+	mu   sync.RWMutex
+	data map[string]containerSpec
+}
+
+func newSpecCache() *specCache {
+	return &specCache{}
+}
+
+func (s *specCache) set(pod *corev1.Pod) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for _, c := range pod.Spec.Containers {
+		key := pod.Namespace + "/" + pod.Name + "/" + c.Name
+		s.data[key] = containerSpec{
+			request: toResourceSpec(c.Resources.Requests),
+			limit:   toResourceSpec(c.Resources.Limits),
+		}
+	}
+}
+
+func (s *specCache) delete(pod *corev1.Pod) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for _, c := range pod.Spec.Containers {
+		key := pod.Namespace + "/" + pod.Name + "/" + c.Name
+		delete(s.data, key)
+	}
+}
+
+func (s *specCache) get(namespace, podName, containerName string) (containerSpec, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	key := namespace + "/" + podName + "/" + containerName
+	cs, ok := s.data[key]
+	return cs, ok
+}
+
+func toResourceSpec(rl corev1.ResourceList) resourceSpec {
+	spec := resourceSpec{}
+	if rl == nil {
+		return spec
+	}
+	if q, ok := rl[corev1.ResourceCPU]; ok {
+		spec.cpuMilli = q.MilliValue()
+	}
+	if q, ok := rl[corev1.ResourceMemory]; ok {
+		spec.memoryByte = q.Value()
+	}
+
+	return spec
+}
+
+func buildClientset() (*kubernetes.Clientset, error) {
+	config, err := rest.InClusterConfig()
+	if err != nil {
+		return nil, err
+	}
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		return nil, err
+	}
+	return clientset, nil
+}
+
+func startPodInformers(ctx context.Context, nodeName string, sc *specCache) error {
+	clientset, err := buildClientset()
+	if err != nil {
+		return err
+	}
+
+	podInformer := cache.NewSharedIndexInformer(
+		cache.NewListWatchFromClient(
+			clientset.CoreV1().RESTClient(),
+			"pod",
+			corev1.NamespaceAll,
+			fields.ParseSelectorOrDie("spec.nodeName="+nodeName),
+		),
+		&corev1.Pod{},
+		30*time.Second,
+		cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc},
+	)
+
+	podInformer.AddEventHandler(
+		cache.ResourceEventHandlerFuncs{
+			AddFunc: func(obj interface{}) {
+				if pod, ok := obj.(*corev1.Pod); ok {
+					sc.set(pod)
+				}
+			},
+			UpdateFunc: func(_, newObj interface{}) {
+				if pod, ok := newObj.(*corev1.Pod); ok {
+					sc.set(pod)
+				}
+			},
+			DeleteFunc: func(obj interface{}) {
+				if pod, ok := obj.(*corev1.Pod); ok {
+					sc.delete(pod)
+				}
+			},
+		},
+	)
+
+	go podInformer.Run(ctx.Done())
+
+	if !cache.WaitForNamedCacheSync("kube-thrifty/pod-informer", ctx.Done(), podInformer.HasSynced) {
+		return fmt.Errorf("pod informer cache sync timed out")
+	}
+	return nil
+}
 
 type kubeletClient struct {
 	hc      *http.Client
@@ -179,6 +308,14 @@ func main() {
 	addr := os.Getenv("INFORMER_ADDR")
 	nodeName := os.Getenv("NODE_NAME")
 	nodeIP := os.Getenv("NODE_IP")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sc := newSpecCache()
+	if err := startPodInformers(ctx, nodeName, sc); err != nil {
+		log.Fatalf("pod informer: %v", err)
+	}
 
 	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
