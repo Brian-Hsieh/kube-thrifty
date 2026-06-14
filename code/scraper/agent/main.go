@@ -74,7 +74,7 @@ type specCache struct {
 }
 
 func newSpecCache() *specCache {
-	return &specCache{}
+	return &specCache{data: make(map[string]containerSpec)}
 }
 
 func (s *specCache) set(pod *corev1.Pod) {
@@ -145,7 +145,7 @@ func startPodInformers(ctx context.Context, nodeName string, sc *specCache) erro
 	podInformer := cache.NewSharedIndexInformer(
 		cache.NewListWatchFromClient(
 			clientset.CoreV1().RESTClient(),
-			"pod",
+			"pods",
 			corev1.NamespaceAll,
 			fields.ParseSelectorOrDie("spec.nodeName="+nodeName),
 		),
