@@ -4,8 +4,8 @@ metadata:
   name: "{{ .Release.Name }}-metrics-reader"
 rules:
 - apiGroups: [""]
-  resources: ["nodes/stats"]
-  verbs: ["get"]
+  resources: ["pods"]
+  verbs: ["get", "list", "watch"]
 - apiGroups: [""]
-  resources: ["nodes/proxy"]
+  resources: ["nodes/metrics", "nodes/proxy"]
   verbs: ["get"]
