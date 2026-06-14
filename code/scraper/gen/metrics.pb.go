@@ -106,12 +106,23 @@ func (x *NodeSnapshot) GetContainers() []*ContainerMetrics {
 }
 
 type ContainerMetrics struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Namespace     string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	PodName       string                 `protobuf:"bytes,2,opt,name=pod_name,json=podName,proto3" json:"pod_name,omitempty"`
-	ContainerName string                 `protobuf:"bytes,3,opt,name=container_name,json=containerName,proto3" json:"container_name,omitempty"`
-	CpuNanoCores  uint64                 `protobuf:"varint,4,opt,name=cpu_nano_cores,json=cpuNanoCores,proto3" json:"cpu_nano_cores,omitempty"`
-	MemWorkingSet uint64                 `protobuf:"varint,5,opt,name=mem_working_set,json=memWorkingSet,proto3" json:"mem_working_set,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// metadata
+	Namespace     string `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	PodName       string `protobuf:"bytes,2,opt,name=pod_name,json=podName,proto3" json:"pod_name,omitempty"`
+	ContainerName string `protobuf:"bytes,3,opt,name=container_name,json=containerName,proto3" json:"container_name,omitempty"`
+	// raw
+	CpuUsageSeconds   float64 `protobuf:"fixed64,4,opt,name=cpu_usage_seconds,json=cpuUsageSeconds,proto3" json:"cpu_usage_seconds,omitempty"`
+	CpuThrottledRatio float64 `protobuf:"fixed64,5,opt,name=cpu_throttled_ratio,json=cpuThrottledRatio,proto3" json:"cpu_throttled_ratio,omitempty"`
+	MemWss            uint64  `protobuf:"varint,6,opt,name=mem_wss,json=memWss,proto3" json:"mem_wss,omitempty"`
+	MemRss            uint64  `protobuf:"varint,7,opt,name=mem_rss,json=memRss,proto3" json:"mem_rss,omitempty"`
+	OomEvents         uint64  `protobuf:"varint,8,opt,name=oom_events,json=oomEvents,proto3" json:"oom_events,omitempty"`
+	// utilizaiton
+	CpuUtilization float64 `protobuf:"fixed64,9,opt,name=cpu_utilization,json=cpuUtilization,proto3" json:"cpu_utilization,omitempty"`
+	MemUtilization float64 `protobuf:"fixed64,10,opt,name=mem_utilization,json=memUtilization,proto3" json:"mem_utilization,omitempty"`
+	// k8s resource spec
+	Limits        *ResourceSpec `protobuf:"bytes,11,opt,name=limits,proto3" json:"limits,omitempty"`
+	Requests      *ResourceSpec `protobuf:"bytes,12,opt,name=requests,proto3" json:"requests,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -167,16 +178,117 @@ func (x *ContainerMetrics) GetContainerName() string {
 	return ""
 }
 
-func (x *ContainerMetrics) GetCpuNanoCores() uint64 {
+func (x *ContainerMetrics) GetCpuUsageSeconds() float64 {
 	if x != nil {
-		return x.CpuNanoCores
+		return x.CpuUsageSeconds
 	}
 	return 0
 }
 
-func (x *ContainerMetrics) GetMemWorkingSet() uint64 {
+func (x *ContainerMetrics) GetCpuThrottledRatio() float64 {
 	if x != nil {
-		return x.MemWorkingSet
+		return x.CpuThrottledRatio
+	}
+	return 0
+}
+
+func (x *ContainerMetrics) GetMemWss() uint64 {
+	if x != nil {
+		return x.MemWss
+	}
+	return 0
+}
+
+func (x *ContainerMetrics) GetMemRss() uint64 {
+	if x != nil {
+		return x.MemRss
+	}
+	return 0
+}
+
+func (x *ContainerMetrics) GetOomEvents() uint64 {
+	if x != nil {
+		return x.OomEvents
+	}
+	return 0
+}
+
+func (x *ContainerMetrics) GetCpuUtilization() float64 {
+	if x != nil {
+		return x.CpuUtilization
+	}
+	return 0
+}
+
+func (x *ContainerMetrics) GetMemUtilization() float64 {
+	if x != nil {
+		return x.MemUtilization
+	}
+	return 0
+}
+
+func (x *ContainerMetrics) GetLimits() *ResourceSpec {
+	if x != nil {
+		return x.Limits
+	}
+	return nil
+}
+
+func (x *ContainerMetrics) GetRequests() *ResourceSpec {
+	if x != nil {
+		return x.Requests
+	}
+	return nil
+}
+
+type ResourceSpec struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	CpuMillis     uint64                 `protobuf:"varint,1,opt,name=cpu_millis,json=cpuMillis,proto3" json:"cpu_millis,omitempty"`
+	MemoryBytes   uint64                 `protobuf:"varint,2,opt,name=memory_bytes,json=memoryBytes,proto3" json:"memory_bytes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ResourceSpec) Reset() {
+	*x = ResourceSpec{}
+	mi := &file_metrics_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResourceSpec) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResourceSpec) ProtoMessage() {}
+
+func (x *ResourceSpec) ProtoReflect() protoreflect.Message {
+	mi := &file_metrics_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResourceSpec.ProtoReflect.Descriptor instead.
+func (*ResourceSpec) Descriptor() ([]byte, []int) {
+	return file_metrics_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *ResourceSpec) GetCpuMillis() uint64 {
+	if x != nil {
+		return x.CpuMillis
+	}
+	return 0
+}
+
+func (x *ResourceSpec) GetMemoryBytes() uint64 {
+	if x != nil {
+		return x.MemoryBytes
 	}
 	return 0
 }
@@ -190,7 +302,7 @@ type Ack struct {
 
 func (x *Ack) Reset() {
 	*x = Ack{}
-	mi := &file_metrics_proto_msgTypes[2]
+	mi := &file_metrics_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -202,7 +314,7 @@ func (x *Ack) String() string {
 func (*Ack) ProtoMessage() {}
 
 func (x *Ack) ProtoReflect() protoreflect.Message {
-	mi := &file_metrics_proto_msgTypes[2]
+	mi := &file_metrics_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -215,7 +327,7 @@ func (x *Ack) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Ack.ProtoReflect.Descriptor instead.
 func (*Ack) Descriptor() ([]byte, []int) {
-	return file_metrics_proto_rawDescGZIP(), []int{2}
+	return file_metrics_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *Ack) GetOk() bool {
@@ -239,13 +351,26 @@ const file_metrics_proto_rawDesc = "" +
 	"\ttimestamp\x18\x05 \x01(\x03R\ttimestamp\x129\n" +
 	"\n" +
 	"containers\x18\x06 \x03(\v2\x19.metrics.ContainerMetricsR\n" +
-	"containers\"\xc0\x01\n" +
+	"containers\"\xd3\x03\n" +
 	"\x10ContainerMetrics\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x19\n" +
 	"\bpod_name\x18\x02 \x01(\tR\apodName\x12%\n" +
-	"\x0econtainer_name\x18\x03 \x01(\tR\rcontainerName\x12$\n" +
-	"\x0ecpu_nano_cores\x18\x04 \x01(\x04R\fcpuNanoCores\x12&\n" +
-	"\x0fmem_working_set\x18\x05 \x01(\x04R\rmemWorkingSet\"\x15\n" +
+	"\x0econtainer_name\x18\x03 \x01(\tR\rcontainerName\x12*\n" +
+	"\x11cpu_usage_seconds\x18\x04 \x01(\x01R\x0fcpuUsageSeconds\x12.\n" +
+	"\x13cpu_throttled_ratio\x18\x05 \x01(\x01R\x11cpuThrottledRatio\x12\x17\n" +
+	"\amem_wss\x18\x06 \x01(\x04R\x06memWss\x12\x17\n" +
+	"\amem_rss\x18\a \x01(\x04R\x06memRss\x12\x1d\n" +
+	"\n" +
+	"oom_events\x18\b \x01(\x04R\toomEvents\x12'\n" +
+	"\x0fcpu_utilization\x18\t \x01(\x01R\x0ecpuUtilization\x12'\n" +
+	"\x0fmem_utilization\x18\n" +
+	" \x01(\x01R\x0ememUtilization\x12-\n" +
+	"\x06limits\x18\v \x01(\v2\x15.metrics.ResourceSpecR\x06limits\x121\n" +
+	"\brequests\x18\f \x01(\v2\x15.metrics.ResourceSpecR\brequests\"P\n" +
+	"\fResourceSpec\x12\x1d\n" +
+	"\n" +
+	"cpu_millis\x18\x01 \x01(\x04R\tcpuMillis\x12!\n" +
+	"\fmemory_bytes\x18\x02 \x01(\x04R\vmemoryBytes\"\x15\n" +
 	"\x03Ack\x12\x0e\n" +
 	"\x02ok\x18\x01 \x01(\bR\x02ok2H\n" +
 	"\x0eMetricsScraper\x126\n" +
@@ -263,21 +388,24 @@ func file_metrics_proto_rawDescGZIP() []byte {
 	return file_metrics_proto_rawDescData
 }
 
-var file_metrics_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_metrics_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_metrics_proto_goTypes = []any{
 	(*NodeSnapshot)(nil),     // 0: metrics.NodeSnapshot
 	(*ContainerMetrics)(nil), // 1: metrics.ContainerMetrics
-	(*Ack)(nil),              // 2: metrics.Ack
+	(*ResourceSpec)(nil),     // 2: metrics.ResourceSpec
+	(*Ack)(nil),              // 3: metrics.Ack
 }
 var file_metrics_proto_depIdxs = []int32{
 	1, // 0: metrics.NodeSnapshot.containers:type_name -> metrics.ContainerMetrics
-	0, // 1: metrics.MetricsScraper.StreamMetrics:input_type -> metrics.NodeSnapshot
-	2, // 2: metrics.MetricsScraper.StreamMetrics:output_type -> metrics.Ack
-	2, // [2:3] is the sub-list for method output_type
-	1, // [1:2] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	2, // 1: metrics.ContainerMetrics.limits:type_name -> metrics.ResourceSpec
+	2, // 2: metrics.ContainerMetrics.requests:type_name -> metrics.ResourceSpec
+	0, // 3: metrics.MetricsScraper.StreamMetrics:input_type -> metrics.NodeSnapshot
+	3, // 4: metrics.MetricsScraper.StreamMetrics:output_type -> metrics.Ack
+	4, // [4:5] is the sub-list for method output_type
+	3, // [3:4] is the sub-list for method input_type
+	3, // [3:3] is the sub-list for extension type_name
+	3, // [3:3] is the sub-list for extension extendee
+	0, // [0:3] is the sub-list for field type_name
 }
 
 func init() { file_metrics_proto_init() }
@@ -291,7 +419,7 @@ func file_metrics_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_metrics_proto_rawDesc), len(file_metrics_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   3,
+			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
