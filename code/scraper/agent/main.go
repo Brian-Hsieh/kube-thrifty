@@ -8,15 +8,17 @@ package main
 import (
 	"context"
 	"crypto/tls"
-	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
 	"example.com/m/gen"
+	dto "github.com/prometheus/client_model/go"
+	"github.com/prometheus/common/expfmt"
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/mem"
 	"google.golang.org/grpc"
@@ -30,37 +32,18 @@ import (
 
 const ScrapeInterval = 500 * time.Millisecond
 
-type (
-	kubeletSummary struct {
-		Pods []podStats `json:"pods"`
-	}
-
-	podStats struct {
-		PodRef     podRef           `json:"podRef"`
-		Containers []containerStats `json:"containers"`
-	}
-
-	podRef struct {
-		Name      string `json:"name"`
-		Namespace string `json:"namespace"`
-	}
-
-	containerStats struct {
-		Name   string       `json:"name"`
-		CPU    *cpuStats    `json:"cpu"`
-		Memory *memoryStats `json:"memory"`
-	}
-	cpuStats struct {
-		UsageNanoCores uint64 `json:"usageNanoCores"`
-	}
-	memoryStats struct {
-		WorkingSetBytes uint64 `json:"workingSetBytes"`
-	}
+const (
+	ContainerCPUUsage     string = "container_cpu_usage_seconds_total"
+	ContainerCPUThrottled string = "container_cpu_cfs_throttled_seconds_total"
+	ContainerCPUPeriods   string = "container_cpu_cfs_periods_total"
+	ContainerMemWSS       string = "container_memory_working_set_bytes"
+	ContainerMemRSS       string = "container_memory_rss"
+	ContainerOOM          string = "container_oom_events_total"
 )
 
 type resourceSpec struct {
-	cpuMilli   int64
-	memoryByte int64
+	cpuMilli   uint64
+	memoryByte uint64
 }
 
 type containerSpec struct {
@@ -73,6 +56,15 @@ type specCache struct {
 	data map[string]containerSpec
 }
 
+func constructKey(ns, pod, c string) string {
+	return ns + "/" + pod + "/" + c
+}
+
+func deconstructKey(k string) (string, string, string) {
+	vs := strings.Split(k, "/")
+	return vs[0], vs[1], vs[2]
+}
+
 func newSpecCache() *specCache {
 	return &specCache{data: make(map[string]containerSpec)}
 }
@@ -82,7 +74,7 @@ func (s *specCache) set(pod *corev1.Pod) {
 	defer s.mu.Unlock()
 
 	for _, c := range pod.Spec.Containers {
-		key := pod.Namespace + "/" + pod.Name + "/" + c.Name
+		key := constructKey(pod.Namespace, pod.Name, c.Name)
 		s.data[key] = containerSpec{
 			request: toResourceSpec(c.Resources.Requests),
 			limit:   toResourceSpec(c.Resources.Limits),
@@ -95,16 +87,15 @@ func (s *specCache) delete(pod *corev1.Pod) {
 	defer s.mu.Unlock()
 
 	for _, c := range pod.Spec.Containers {
-		key := pod.Namespace + "/" + pod.Name + "/" + c.Name
+		key := constructKey(pod.Namespace, pod.Name, c.Name)
 		delete(s.data, key)
 	}
 }
 
-func (s *specCache) get(namespace, podName, containerName string) (containerSpec, bool) {
+func (s *specCache) get(key string) (containerSpec, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	key := namespace + "/" + podName + "/" + containerName
 	cs, ok := s.data[key]
 	return cs, ok
 }
@@ -182,6 +173,15 @@ func startPodInformers(ctx context.Context, nodeName string, sc *specCache) erro
 	return nil
 }
 
+var wantedMetrics = map[string]bool{
+	ContainerCPUUsage:     true,
+	ContainerCPUThrottled: true,
+	ContainerCPUPeriods:   true,
+	ContainerMemWSS:       true,
+	ContainerMemRSS:       true,
+	ContainerOOM:          true,
+}
+
 type kubeletClient struct {
 	hc      *http.Client
 	baseURL string
@@ -207,8 +207,8 @@ func newKubeletClient(nodeIP string) (*kubeletClient, error) {
 	}, nil
 }
 
-func (kc *kubeletClient) summary(ctx context.Context) (*kubeletSummary, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, kc.baseURL+"/stats/summary", nil)
+func (kc *kubeletClient) scrape(ctx context.Context) (map[string]*dto.MetricFamily, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, kc.baseURL+"/metrics/cadvisor", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -225,15 +225,56 @@ func (kc *kubeletClient) summary(ctx context.Context) (*kubeletSummary, error) {
 		return nil, fmt.Errorf("kubelete code: %d", resp.StatusCode)
 	}
 
-	var ks kubeletSummary
-	if err := json.NewDecoder(resp.Body).Decode(&ks); err != nil {
+	var parser expfmt.TextParser
+	all, err := parser.TextToMetricFamilies(resp.Body)
+	if err != nil {
 		return nil, err
 	}
 
-	return &ks, nil
+	filtered := make(map[string]*dto.MetricFamily, len(wantedMetrics))
+	for s, mf := range all {
+		if wantedMetrics[s] {
+			filtered[s] = mf
+		}
+	}
+	return filtered, nil
 }
 
-func scrape(ctx context.Context, nodeName string, kc *kubeletClient) (*gen.NodeSnapshot, error) {
+func getLabelValue(m *dto.Metric, label string) string {
+	for _, lp := range m.GetLabel() {
+		if lp.GetName() == label {
+			return lp.GetValue()
+		}
+	}
+	return ""
+}
+
+func generateMetricsMap(mf *dto.MetricFamily) map[string]float64 {
+	out := make(map[string]float64)
+	if mf == nil {
+		return out
+	}
+
+	for _, m := range mf.GetMetric() {
+		c := getLabelValue(m, "container")
+		if c == "" || c == "POD" {
+			continue
+		}
+		ns := getLabelValue(m, "namespace")
+		pod := getLabelValue(m, "pod")
+		key := constructKey(ns, pod, c)
+		switch mf.GetType() {
+		case dto.MetricType_COUNTER:
+			out[key] = m.GetCounter().GetValue()
+		case dto.MetricType_GAUGE:
+			out[key] = m.GetGauge().GetValue()
+		}
+	}
+
+	return out
+}
+
+func collect(ctx context.Context, nodeName string, kc *kubeletClient, sc *specCache) (*gen.NodeSnapshot, error) {
 	// node-level
 	cpuPer, err := cpu.PercentWithContext(ctx, 0, false)
 	if err != nil {
@@ -246,11 +287,18 @@ func scrape(ctx context.Context, nodeName string, kc *kubeletClient) (*gen.NodeS
 	}
 
 	// container-level
-	summary, err := kc.summary(ctx)
+	mfs, err := kc.scrape(ctx)
 	if err != nil {
 		log.Printf("warn: kubelet summary: %v", err)
-		summary = &kubeletSummary{}
+		mfs = map[string]*dto.MetricFamily{}
 	}
+
+	cpuUsage := generateMetricsMap(mfs[ContainerCPUUsage])
+	cpuThrottled := generateMetricsMap(mfs[ContainerCPUThrottled])
+	cpuPeriods := generateMetricsMap(mfs[ContainerCPUPeriods])
+	memWSS := generateMetricsMap(mfs[ContainerMemWSS])
+	memRSS := generateMetricsMap(mfs[ContainerMemRSS])
+	oom := generateMetricsMap(mfs[ContainerOOM])
 
 	snap := &gen.NodeSnapshot{
 		NodeName:   nodeName,
@@ -260,27 +308,55 @@ func scrape(ctx context.Context, nodeName string, kc *kubeletClient) (*gen.NodeS
 		Timestamp:  time.Now().UnixNano(),
 	}
 
-	for _, pod := range summary.Pods {
-		for _, c := range pod.Containers {
-			cm := &gen.ContainerMetrics{
-				Namespace:     pod.PodRef.Namespace,
-				PodName:       pod.PodRef.Name,
-				ContainerName: c.Name,
-			}
-			if c.CPU != nil {
-				cm.CpuNanoCores = c.CPU.UsageNanoCores
-			}
-			if c.Memory != nil {
-				cm.MemWorkingSet = c.Memory.WorkingSetBytes
-			}
+	for k, periods := range cpuPeriods {
+		ns, pod, c := deconstructKey(k)
 
-			snap.Containers = append(snap.Containers, cm)
+		throttledRatio := 0.0
+		if periods > 0 {
+			throttledRatio = cpuThrottled[k] / periods
 		}
+
+		requests := &gen.ResourceSpec{}
+		limits := &gen.ResourceSpec{}
+
+		cs, hasSpec := sc.get(k)
+		if hasSpec {
+			requests = &gen.ResourceSpec{
+				CpuMillis:   cs.request.cpuMilli,
+				MemoryBytes: cs.request.memoryByte,
+			}
+			limits = &gen.ResourceSpec{
+				CpuMillis:   cs.limit.cpuMilli,
+				MemoryBytes: cs.limit.memoryByte,
+			}
+		}
+
+		// TODO: calculate utilizaiton for cpu and mem
+		cpuUtilization := -1.0
+		memUtilization := -1.0
+
+		cm := &gen.ContainerMetrics{
+			Namespace:         ns,
+			PodName:           pod,
+			ContainerName:     c,
+			CpuUsageSeconds:   cpuUsage[k],
+			CpuThrottledRatio: throttledRatio,
+			MemWss:            uint64(memWSS[k]),
+			MemRss:            uint64(memRSS[k]),
+			OomEvents:         uint64(oom[k]),
+			CpuUtilization:    cpuUtilization,
+			MemUtilization:    memUtilization,
+			Requests:          requests,
+			Limits:            limits,
+		}
+
+		snap.Containers = append(snap.Containers, cm)
 	}
+
 	return snap, nil
 }
 
-func stream(client gen.MetricsScraperClient, nodeName string, kc *kubeletClient) error {
+func stream(client gen.MetricsScraperClient, nodeName string, kc *kubeletClient, sc *specCache) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -293,7 +369,7 @@ func stream(client gen.MetricsScraperClient, nodeName string, kc *kubeletClient)
 	defer ticker.Stop()
 
 	for range ticker.C {
-		snap, err := scrape(ctx, nodeName, kc)
+		snap, err := collect(ctx, nodeName, kc, sc)
 		if err != nil {
 			return err
 		}
@@ -330,7 +406,7 @@ func main() {
 	}
 
 	for {
-		if err := stream(client, nodeName, kc); err != nil {
+		if err := stream(client, nodeName, kc, sc); err != nil {
 			log.Printf("stream error: %v -- retry in 3s", err)
 			time.Sleep(3 * time.Second)
 		}
