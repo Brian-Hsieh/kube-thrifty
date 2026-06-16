@@ -243,8 +243,8 @@ func (x *ContainerMetrics) GetRequests() *ResourceSpec {
 
 type ResourceSpec struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	CpuMillis     uint64                 `protobuf:"varint,1,opt,name=cpu_millis,json=cpuMillis,proto3" json:"cpu_millis,omitempty"`
-	MemoryBytes   uint64                 `protobuf:"varint,2,opt,name=memory_bytes,json=memoryBytes,proto3" json:"memory_bytes,omitempty"`
+	CpuMillis     int64                  `protobuf:"varint,1,opt,name=cpu_millis,json=cpuMillis,proto3" json:"cpu_millis,omitempty"`
+	MemoryBytes   int64                  `protobuf:"varint,2,opt,name=memory_bytes,json=memoryBytes,proto3" json:"memory_bytes,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -279,14 +279,14 @@ func (*ResourceSpec) Descriptor() ([]byte, []int) {
 	return file_metrics_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *ResourceSpec) GetCpuMillis() uint64 {
+func (x *ResourceSpec) GetCpuMillis() int64 {
 	if x != nil {
 		return x.CpuMillis
 	}
 	return 0
 }
 
-func (x *ResourceSpec) GetMemoryBytes() uint64 {
+func (x *ResourceSpec) GetMemoryBytes() int64 {
 	if x != nil {
 		return x.MemoryBytes
 	}
@@ -369,8 +369,8 @@ const file_metrics_proto_rawDesc = "" +
 	"\brequests\x18\f \x01(\v2\x15.metrics.ResourceSpecR\brequests\"P\n" +
 	"\fResourceSpec\x12\x1d\n" +
 	"\n" +
-	"cpu_millis\x18\x01 \x01(\x04R\tcpuMillis\x12!\n" +
-	"\fmemory_bytes\x18\x02 \x01(\x04R\vmemoryBytes\"\x15\n" +
+	"cpu_millis\x18\x01 \x01(\x03R\tcpuMillis\x12!\n" +
+	"\fmemory_bytes\x18\x02 \x01(\x03R\vmemoryBytes\"\x15\n" +
 	"\x03Ack\x12\x0e\n" +
 	"\x02ok\x18\x01 \x01(\bR\x02ok2H\n" +
 	"\x0eMetricsScraper\x126\n" +

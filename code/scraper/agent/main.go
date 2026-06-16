@@ -19,6 +19,7 @@ import (
 	"example.com/m/gen"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/common/expfmt"
+	"github.com/prometheus/common/model"
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/mem"
 	"google.golang.org/grpc"
@@ -42,8 +43,8 @@ const (
 )
 
 type resourceSpec struct {
-	cpuMilli   uint64
-	memoryByte uint64
+	cpuMilli   int64
+	memoryByte int64
 }
 
 type containerSpec struct {
@@ -225,7 +226,7 @@ func (kc *kubeletClient) scrape(ctx context.Context) (map[string]*dto.MetricFami
 		return nil, fmt.Errorf("kubelete code: %d", resp.StatusCode)
 	}
 
-	var parser expfmt.TextParser
+	parser := expfmt.NewTextParser(model.LegacyValidation)
 	all, err := parser.TextToMetricFamilies(resp.Body)
 	if err != nil {
 		return nil, err
@@ -308,12 +309,12 @@ func collect(ctx context.Context, nodeName string, kc *kubeletClient, sc *specCa
 		Timestamp:  time.Now().UnixNano(),
 	}
 
-	for k, periods := range cpuPeriods {
+	for k, usage := range cpuUsage {
 		ns, pod, c := deconstructKey(k)
 
 		throttledRatio := 0.0
-		if periods > 0 {
-			throttledRatio = cpuThrottled[k] / periods
+		if cpuPeriods[k] > 0 {
+			throttledRatio = cpuThrottled[k] / cpuPeriods[k]
 		}
 
 		requests := &gen.ResourceSpec{}
@@ -339,7 +340,7 @@ func collect(ctx context.Context, nodeName string, kc *kubeletClient, sc *specCa
 			Namespace:         ns,
 			PodName:           pod,
 			ContainerName:     c,
-			CpuUsageSeconds:   cpuUsage[k],
+			CpuUsageSeconds:   usage,
 			CpuThrottledRatio: throttledRatio,
 			MemWss:            uint64(memWSS[k]),
 			MemRss:            uint64(memRSS[k]),
