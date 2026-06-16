@@ -19,12 +19,26 @@ import (
 	"google.golang.org/grpc"
 )
 
+type resourceSpec struct {
+	CPUMillis  int64 `json:"cpu_millis`
+	MemoryByte int64 `json:"memory_bytes"`
+}
+
 type containerSnapshot struct {
-	Namespace     string `json:"namespace"`
-	PodName       string `json:"pod"`
-	ContainerName string `json:"container"`
-	CPUNanoCores  uint64 `json:"cpu_nano_cores"`
-	MemWorkingSet uint64 `json:"mem_working_set"`
+	Namespace         string  `json:"namespace"`
+	PodName           string  `json:"pod"`
+	ContainerName     string  `json:"container"`
+	CPUUsageSeconds   float64 `json:"cpu_usage_seconds"`
+	CPUThrottledRatio float64 `json:"cpu_throttled_ratio"`
+	MemWorkingSet     uint64  `json:"mem_working_set"`
+	MemResidentSet    uint64  `json:"mem_resident_set"`
+	OOM               uint64  `json:"oom"`
+
+	CPUUtilization float64 `json:"cpu_utilization"`
+	MemUtilization float64 `json:"mem_utilization"`
+
+	Requests resourceSpec `json:"requests"`
+	Limits   resourceSpec `json:"limits"`
 }
 
 type nodeSnapshot struct {
@@ -83,11 +97,24 @@ func (s *server) StreamMetrics(stream gen.MetricsScraper_StreamMetricsServer) er
 
 		for _, c := range msg.Containers {
 			snap.Containers = append(snap.Containers, containerSnapshot{
-				Namespace:     c.Namespace,
-				PodName:       c.PodName,
-				ContainerName: c.ContainerName,
-				CPUNanoCores:  c.CpuNanoCores,
-				MemWorkingSet: c.MemWorkingSet,
+				Namespace:         c.Namespace,
+				PodName:           c.PodName,
+				ContainerName:     c.ContainerName,
+				CPUUsageSeconds:   c.CpuUsageSeconds,
+				CPUThrottledRatio: c.CpuThrottledRatio,
+				MemWorkingSet:     c.MemWss,
+				MemResidentSet:    c.MemRss,
+				OOM:               c.OomEvents,
+				CPUUtilization:    c.CpuUtilization,
+				MemUtilization:    c.MemUtilization,
+				Requests: resourceSpec{
+					CPUMillis:  c.Requests.CpuMillis,
+					MemoryByte: c.Requests.MemoryBytes,
+				},
+				Limits: resourceSpec{
+					CPUMillis:  c.Limits.CpuMillis,
+					MemoryByte: c.Limits.MemoryBytes,
+				},
 			})
 		}
 
