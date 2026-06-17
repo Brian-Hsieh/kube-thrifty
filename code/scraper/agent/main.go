@@ -366,8 +366,7 @@ func collect(ctx context.Context, nodeName string, kc *kubeletClient, sc *specCa
 }
 
 func stream(client gen.MetricsScraperClient, nodeName string, kc *kubeletClient, sc *specCache) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+	ctx := context.Background()
 
 	s, err := client.StreamMetrics(ctx, grpc.WaitForReady(true))
 	if err != nil {
@@ -378,7 +377,10 @@ func stream(client gen.MetricsScraperClient, nodeName string, kc *kubeletClient,
 	defer ticker.Stop()
 
 	for range ticker.C {
-		snap, err := collect(ctx, nodeName, kc, sc)
+		scrapeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		snap, err := collect(scrapeCtx, nodeName, kc, sc)
+		cancel()
+
 		if err != nil {
 			return err
 		}
