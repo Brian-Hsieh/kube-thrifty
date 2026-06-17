@@ -35,6 +35,8 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: status.hostIP
+            - name: MODE
+              value: {{ .Values.mode }}
           resources:
             limits:
               cpu: "100m"

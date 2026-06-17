@@ -1,3 +1,4 @@
+mode: prod
 agent:
   image:
     repo: "kube-thrifty-agent"

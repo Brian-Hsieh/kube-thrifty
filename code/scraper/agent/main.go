@@ -10,8 +10,10 @@ import (
 	"crypto/tls"
 	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -30,6 +32,8 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 )
+
+var devMode = false
 
 const ScrapeInterval = 500 * time.Millisecond
 
@@ -209,6 +213,8 @@ func newKubeletClient(nodeIP string) (*kubeletClient, error) {
 }
 
 func (kc *kubeletClient) scrape(ctx context.Context) (map[string]*dto.MetricFamily, error) {
+	defer perf("scrape")()
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, kc.baseURL+"/metrics/cadvisor", nil)
 	if err != nil {
 		return nil, err
@@ -276,6 +282,8 @@ func generateMetricsMap(mf *dto.MetricFamily) map[string]float64 {
 }
 
 func collect(ctx context.Context, nodeName string, kc *kubeletClient, sc *specCache) (*gen.NodeSnapshot, error) {
+	defer perf("collect")()
+
 	// node-level
 	cpuPer, err := cpu.PercentWithContext(ctx, 0, false)
 	if err != nil {
@@ -381,7 +389,58 @@ func stream(client gen.MetricsScraperClient, nodeName string, kc *kubeletClient,
 	return nil
 }
 
+// helper for performance tracking
+func perf(name string) func() {
+	if !devMode {
+		return func() {}
+	}
+
+	start := time.Now()
+	pc, _, _, ok := runtime.Caller(1)
+	if !ok {
+		return func() {
+			slog.Debug("Execution time", "func", name, "time_duration(sec)", time.Since(start).Seconds())
+		}
+	}
+
+	return func() {
+		s := fmt.Sprintf("time duration: %vs", time.Since(start).Seconds())
+		r := slog.NewRecord(time.Now(), slog.LevelDebug, s, pc)
+		_ = slog.Default().Handler().Handle(context.Background(), r)
+	}
+}
+
+// logger settings
+func configLogger() *slog.Logger {
+	removeTime := func(gs []string, a slog.Attr) slog.Attr {
+		if a.Key == slog.TimeKey && len(gs) == 0 {
+			return slog.Attr{}
+		}
+		return a
+	}
+
+	source := false
+	level := slog.LevelInfo
+	if devMode {
+		level = slog.LevelDebug
+		source = true
+	}
+
+	opts := &slog.HandlerOptions{
+		AddSource:   source,
+		Level:       level,
+		ReplaceAttr: removeTime,
+	}
+	h := slog.NewTextHandler(os.Stdout, opts)
+	return slog.New(h)
+}
+
 func main() {
+	if os.Getenv("MODE") == "dev" {
+		devMode = true
+	}
+	slog.SetDefault(configLogger())
+
 	addr := os.Getenv("INFORMER_ADDR")
 	nodeName := os.Getenv("NODE_NAME")
 	nodeIP := os.Getenv("NODE_IP")
