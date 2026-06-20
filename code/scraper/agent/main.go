@@ -281,7 +281,45 @@ func generateMetricsMap(mf *dto.MetricFamily) map[string]float64 {
 	return out
 }
 
-func collect(ctx context.Context, nodeName string, kc *kubeletClient, sc *specCache) (*gen.NodeSnapshot, error) {
+type cpuSample struct {
+	usage       float64
+	lastUpdated time.Time
+}
+
+// we might need mutex if we ever go "concurrent collecting metrics" path
+type cpuHistory struct {
+	prev map[string]cpuSample
+}
+
+func newCPUHistory() *cpuHistory {
+	return &cpuHistory{
+		prev: make(map[string]cpuSample),
+	}
+}
+
+func (ch *cpuHistory) set(k string, usage float64, t time.Time) {
+	ch.prev[k] = cpuSample{
+		usage:       usage,
+		lastUpdated: t,
+	}
+}
+
+func (ch *cpuHistory) rate(k string, usage float64, t time.Time) float64 {
+	prev, ok := ch.prev[k]
+	if !ok {
+		ch.set(k, usage, t)
+		return -1
+	}
+
+	duration := t.Sub(prev.lastUpdated).Seconds()
+	if duration <= 0 {
+		return -1
+	}
+
+	return (usage - prev.usage) / duration * 1000
+}
+
+func collect(ctx context.Context, nodeName string, kc *kubeletClient, sc *specCache, ch *cpuHistory) (*gen.NodeSnapshot, error) {
 	defer perf("collect")()
 
 	// node-level
@@ -340,9 +378,21 @@ func collect(ctx context.Context, nodeName string, kc *kubeletClient, sc *specCa
 			}
 		}
 
-		// TODO: calculate utilizaiton for cpu and mem
+		cpuRateMillis := ch.rate(k, usage, time.Now())
+
 		cpuUtilization := -1.0
 		memUtilization := -1.0
+
+		// TODO: we could add oom risk as well
+		// oom rish makes sense when limits is set
+		// otherwise, use node memeory for denominator
+		// probably use additional flag to let frontend knows the result is not realistic
+		if cpuRateMillis >= 0 && cs.request.cpuMilli > 0 {
+			cpuUtilization = cpuRateMillis / float64(cs.request.cpuMilli)
+		}
+		if cs.request.memoryByte > 0 {
+			memUtilization = memWSS[k] / float64(cs.request.memoryByte)
+		}
 
 		cm := &gen.ContainerMetrics{
 			Namespace:         ns,
@@ -365,7 +415,7 @@ func collect(ctx context.Context, nodeName string, kc *kubeletClient, sc *specCa
 	return snap, nil
 }
 
-func stream(client gen.MetricsScraperClient, nodeName string, kc *kubeletClient, sc *specCache) error {
+func stream(client gen.MetricsScraperClient, nodeName string, kc *kubeletClient, sc *specCache, ch *cpuHistory) error {
 	ctx := context.Background()
 
 	s, err := client.StreamMetrics(ctx, grpc.WaitForReady(true))
@@ -378,7 +428,7 @@ func stream(client gen.MetricsScraperClient, nodeName string, kc *kubeletClient,
 
 	for range ticker.C {
 		scrapeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-		snap, err := collect(scrapeCtx, nodeName, kc, sc)
+		snap, err := collect(scrapeCtx, nodeName, kc, sc, ch)
 		cancel()
 
 		if err != nil {
@@ -451,6 +501,8 @@ func main() {
 	defer cancel()
 
 	sc := newSpecCache()
+	ch := newCPUHistory()
+
 	if err := startPodInformers(ctx, nodeName, sc); err != nil {
 		log.Fatalf("pod informer: %v", err)
 	}
@@ -468,7 +520,7 @@ func main() {
 	}
 
 	for {
-		if err := stream(client, nodeName, kc, sc); err != nil {
+		if err := stream(client, nodeName, kc, sc, ch); err != nil {
 			log.Printf("stream error: %v -- retry in 3s", err)
 			time.Sleep(3 * time.Second)
 		}
