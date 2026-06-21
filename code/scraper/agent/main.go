@@ -13,12 +13,12 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"runtime"
 	"strings"
 	"sync"
 	"time"
 
 	"example.com/m/gen"
+	"example.com/m/utils"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/common/expfmt"
 	"github.com/prometheus/common/model"
@@ -33,7 +33,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 )
 
-var devMode = false
+var profiler *utils.Profiler
 
 const ScrapeInterval = 500 * time.Millisecond
 
@@ -213,7 +213,7 @@ func newKubeletClient(nodeIP string) (*kubeletClient, error) {
 }
 
 func (kc *kubeletClient) scrape(ctx context.Context) (map[string]*dto.MetricFamily, error) {
-	defer perf("scrape")()
+	defer profiler.Perf()()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, kc.baseURL+"/metrics/cadvisor", nil)
 	if err != nil {
@@ -320,7 +320,7 @@ func (ch *cpuHistory) rate(k string, usage float64, t time.Time) float64 {
 }
 
 func collect(ctx context.Context, nodeName string, kc *kubeletClient, sc *specCache, ch *cpuHistory) (*gen.NodeSnapshot, error) {
-	defer perf("collect")()
+	defer profiler.Perf()()
 
 	// node-level
 	cpuPer, err := cpu.PercentWithContext(ctx, 0, false)
@@ -441,29 +441,8 @@ func stream(client gen.MetricsScraperClient, nodeName string, kc *kubeletClient,
 	return nil
 }
 
-// helper for performance tracking
-func perf(name string) func() {
-	if !devMode {
-		return func() {}
-	}
-
-	start := time.Now()
-	pc, _, _, ok := runtime.Caller(1)
-	if !ok {
-		return func() {
-			slog.Debug("Execution time", "func", name, "time_duration(sec)", time.Since(start).Seconds())
-		}
-	}
-
-	return func() {
-		s := fmt.Sprintf("time duration: %vs", time.Since(start).Seconds())
-		r := slog.NewRecord(time.Now(), slog.LevelDebug, s, pc)
-		_ = slog.Default().Handler().Handle(context.Background(), r)
-	}
-}
-
 // logger settings
-func configLogger() *slog.Logger {
+func configLogger(devMode bool) *slog.Logger {
 	removeTime := func(gs []string, a slog.Attr) slog.Attr {
 		if a.Key == slog.TimeKey && len(gs) == 0 {
 			return slog.Attr{}
@@ -488,10 +467,10 @@ func configLogger() *slog.Logger {
 }
 
 func main() {
-	if os.Getenv("MODE") == "dev" {
-		devMode = true
-	}
-	slog.SetDefault(configLogger())
+	isDevMode := os.Getenv("MODE") == "dev"
+
+	profiler = utils.NewProfiler(isDevMode)
+	slog.SetDefault(configLogger(isDevMode))
 
 	addr := os.Getenv("INFORMER_ADDR")
 	nodeName := os.Getenv("NODE_NAME")

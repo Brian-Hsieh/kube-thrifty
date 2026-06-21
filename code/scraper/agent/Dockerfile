@@ -8,6 +8,7 @@ RUN go mod download
 
 # copy generated proto binary and agent source
 COPY gen/ ./gen/
+COPY utils/utils.go ./utils/utils.go
 COPY agent/main.go ./agent/main.go
 
 
