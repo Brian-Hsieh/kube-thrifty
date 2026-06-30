@@ -208,7 +208,7 @@ func (m model) View() string {
 	header := m.styles.Title.Render("Kube-Thrifty") + "  " + m.statusLine()
 	menu := m.styles.Muted.Render("j/k navigate  q quit  s sort  / filter  c cpu  m memory  ? help")
 
-	leftWidth := max(26, m.width/3)
+	leftWidth := max(26, m.width/4)
 	rightWidth := max(40, m.width-leftWidth-3)
 
 	nodePanel := m.styles.Panel.Width(leftWidth - 2).Render(m.renderNodeList(leftWidth - 4))
@@ -276,9 +276,18 @@ func (m model) renderDetails(width int) string {
 		return m.styles.Subtle.Render("No node selected")
 	}
 
+	var lines []string
 	node := m.visibleNodes[m.selected]
-	lines := []string{m.styles.Subtle.Render(fmt.Sprintf("Node: %s", node.Name)), ""}
-	barWidth := max(10, width-52)
+	title := fmt.Sprintf("%%s on Node: %s", node.Name)
+	// TODO: refactor: move this out
+	labelWidth := 32
+	barWidth := max(10, (width-labelWidth)*3/5)
+	perWidth := 7
+	barAndPerWidth := barWidth + perWidth
+	formatter := "%-*s %-*s %s"
+	legend := func(valueHeader string) string {
+		return fmt.Sprintf(formatter, labelWidth, "ns/pod:container", barAndPerWidth, "Utilization bar (%)", valueHeader)
+	}
 
 	if m.resource == resourceCPU {
 		containers := sortCPUContainers(node.Containers, m.sortBy)
@@ -286,27 +295,29 @@ func (m model) renderDetails(width int) string {
 			return m.styles.Subtle.Render("No container cpu data on selected node")
 		}
 
-		lines = append(lines, m.styles.Subtle.Render("CPU"), "")
+		lines = append(lines, m.styles.Subtle.Render(fmt.Sprintf(title, "CPU")), "")
+		lines = append(lines, m.styles.Subtle.Render(legend("Rate(mCPU)")), "")
+
 		for _, c := range containers {
-			label := fmt.Sprintf("%s/%s:%s", c.Namespace, c.Pod, c.Container)
-			if len(label) > 32 {
-				label = label[:29] + "..."
+			label := fmt.Sprintf("%s/%s:%s", c.Namespace, c.PodName, c.Name)
+			if len(label) > labelWidth {
+				label = label[:labelWidth-3] + "..."
 			}
 
-			maxForBar := c.LimitCores
-			if maxForBar <= 0 {
-				maxForBar = node.AllocatedCPUCores
+			valueText := "<1"
+			if c.CPURate > 0 {
+				valueText = fmt.Sprintf("%.0f", c.CPURate)
 			}
 
-			bar := ui.EmptyProgressBar(barWidth)
-			valueText := fmt.Sprintf("%8.2f cores", c.UsageCores)
-			if maxForBar > 0 {
-				bar = ui.ProgressBar(c.UsageCores, maxForBar, barWidth)
-				percent := (c.UsageCores / maxForBar) * 100
-				valueText = fmt.Sprintf("%6.2f/%-6.2f cores (%5.1f%%)", c.UsageCores, maxForBar, percent)
+			var bar string
+			if c.CPUUtilization != -1 {
+				bar = ui.ProgressBar(c.CPUUtilization, barWidth)
+				bar = bar + fmt.Sprintf(" %-*s", perWidth-1, fmt.Sprintf("%.1f%%", c.CPUUtilization*100))
+			} else {
+				bar = ui.EmptyProgressBar(barWidth) + fmt.Sprintf(" %-*s", perWidth-1, "")
 			}
 
-			line := fmt.Sprintf("%-32s %s %s", label, bar, valueText)
+			line := fmt.Sprintf(formatter, labelWidth, label, barAndPerWidth, bar, valueText)
 			lines = append(lines, m.styles.BarLabel.Render(line))
 		}
 
@@ -318,28 +329,27 @@ func (m model) renderDetails(width int) string {
 		return m.styles.Subtle.Render("No container memory data on selected node")
 	}
 
-	lines = append(lines, m.styles.Subtle.Render("Memory"), "")
+	lines = append(lines, m.styles.Subtle.Render(fmt.Sprintf(title, "Memory")), "")
+	lines = append(lines, m.styles.Subtle.Render(legend("WSS(MB)")), "")
 
 	for _, c := range containers {
-		label := fmt.Sprintf("%s/%s:%s", c.Namespace, c.Pod, c.Container)
-		if len(label) > 32 {
-			label = label[:29] + "..."
+		label := fmt.Sprintf("%s/%s:%s", c.Namespace, c.PodName, c.Name)
+		if len(label) > labelWidth {
+			label = label[:labelWidth-3] + "..."
 		}
 
-		maxForBar := c.LimitMB
-		if maxForBar <= 0 {
-			maxForBar = node.AllocatedMemoryMB
+		memMB := bytesToMB(c.MemWorkingSet)
+		valueText := fmt.Sprintf("%.1f", memMB)
+
+		var bar string
+		if c.MemUtilization != -1 {
+			bar = ui.ProgressBar(c.MemUtilization, barWidth)
+			bar = bar + fmt.Sprintf(" %-*s", perWidth-1, fmt.Sprintf("%.1f%%", c.MemUtilization*100))
+		} else {
+			bar = ui.EmptyProgressBar(barWidth) + fmt.Sprintf(" %-*s", perWidth-1, "")
 		}
 
-		bar := ui.EmptyProgressBar(barWidth)
-		valueText := fmt.Sprintf("%8.1f MB", c.UsageMB)
-		if maxForBar > 0 {
-			bar = ui.ProgressBar(c.UsageMB, maxForBar, barWidth)
-			percent := (c.UsageMB / maxForBar) * 100
-			valueText = fmt.Sprintf("%6.1f/%-6.1f MB (%5.1f%%)", c.UsageMB, maxForBar, percent)
-		}
-
-		line := fmt.Sprintf("%-32s %s %s", label, bar, valueText)
+		line := fmt.Sprintf(formatter, labelWidth, label, barAndPerWidth, bar, valueText)
 		lines = append(lines, m.styles.BarLabel.Render(line))
 	}
 

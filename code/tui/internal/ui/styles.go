@@ -32,34 +32,14 @@ func NewStyles() Styles {
 	}
 }
 
-func ProgressBar(value, max float64, width int) string {
-	if width < 8 {
-		width = 8
-	}
-
-	ratio := 0.0
-	if max > 0 {
-		ratio = value / max
-	}
-	if ratio < 0 {
-		ratio = 0
-	}
-	if ratio > 1 {
-		ratio = 1
-	}
-
-	filled := int(math.Round(float64(width) * ratio))
-	if filled > width {
-		filled = width
-	}
-
+func ProgressBar(value float64, width int) string {
+	width -= 2 // 2 braces
+	filled := int(math.Round(float64(width) * value))
+	filled = min(filled, width)
 	return fmt.Sprintf("[%s%s]", strings.Repeat("=", filled), strings.Repeat("-", width-filled))
 }
 
 func EmptyProgressBar(width int) string {
-	if width < 8 {
-		width = 8
-	}
-
-	return fmt.Sprintf("[%s]", strings.Repeat("-", width))
+	width -= 2 // 2 braces
+	return fmt.Sprintf("[%s]", strings.Repeat(" ", width))
 }
