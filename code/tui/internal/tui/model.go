@@ -3,12 +3,13 @@ package tui
 import (
 	"context"
 	"fmt"
-	"kube-thrifty/tui/internal/api"
-	"kube-thrifty/tui/internal/kube"
-	"kube-thrifty/tui/internal/ui"
 	"sort"
 	"strings"
 	"time"
+
+	"kube-thrifty/tui/internal/api"
+	"kube-thrifty/tui/internal/kube"
+	"kube-thrifty/tui/internal/ui"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -221,7 +222,7 @@ func (m model) View() string {
 
 func (m model) statusLine() string {
 	parts := []string{}
-	parts = append(parts, m.styles.Subtle.Render(fmt.Sprintf("pod: %s", m.forwarder.ActivePod())))
+	parts = append(parts, m.styles.Subtle.Render(fmt.Sprintf("target: %s", m.forwarder.ActiveTarget())))
 
 	if m.updating {
 		parts = append(parts, m.styles.Subtle.Render("updating"))
@@ -257,9 +258,6 @@ func (m model) renderNodeList(width int) string {
 	lines = append(lines, m.styles.Subtle.Render("Nodes"))
 	for i, node := range m.visibleNodes {
 		line := node.Name
-		if node.InternalIP != "" {
-			line = fmt.Sprintf("%s (%s)", node.Name, node.InternalIP)
-		}
 		if len(line) > width && width > 3 {
 			line = line[:width-3] + "..."
 		}
@@ -283,7 +281,7 @@ func (m model) renderDetails(width int) string {
 	barWidth := max(10, width-52)
 
 	if m.resource == resourceCPU {
-		containers := sortCPUContainers(node.ContainerCPUInfo, node.AllocatedCPUCores, m.sortBy)
+		containers := sortCPUContainers(node.Containers, m.sortBy)
 		if len(containers) == 0 {
 			return m.styles.Subtle.Render("No container cpu data on selected node")
 		}
@@ -315,7 +313,7 @@ func (m model) renderDetails(width int) string {
 		return strings.Join(lines, "\n")
 	}
 
-	containers := sortMemoryContainers(node.ContainerMemoryInfo, node.AllocatedMemoryMB, m.sortBy)
+	containers := sortMemoryContainers(node.Containers, m.sortBy)
 	if len(containers) == 0 {
 		return m.styles.Subtle.Render("No container memory data on selected node")
 	}
@@ -408,30 +406,20 @@ func (m *model) recomputeVisibleNodes() {
 			continue
 		}
 
-		matchedMemory := make([]api.ContainerMemoryInfo, 0, len(node.ContainerMemoryInfo))
-		for _, c := range node.ContainerMemoryInfo {
+		matchedContainers := make([]api.Container, 0, len(node.Containers))
+		for _, c := range node.Containers {
 			namespace := strings.ToLower(c.Namespace)
-			pod := strings.ToLower(c.Pod)
+			pod := strings.ToLower(c.PodName)
 			if strings.Contains(namespace, needle) || strings.Contains(pod, needle) {
-				matchedMemory = append(matchedMemory, c)
+				matchedContainers = append(matchedContainers, c)
 			}
 		}
 
-		matchedCPU := make([]api.ContainerCPUInfo, 0, len(node.ContainerCPUInfo))
-		for _, c := range node.ContainerCPUInfo {
-			namespace := strings.ToLower(c.Namespace)
-			pod := strings.ToLower(c.Pod)
-			if strings.Contains(namespace, needle) || strings.Contains(pod, needle) {
-				matchedCPU = append(matchedCPU, c)
-			}
-		}
-
-		if len(matchedMemory) == 0 && len(matchedCPU) == 0 {
+		if len(matchedContainers) == 0 {
 			continue
 		}
 
-		nodeCopy.ContainerMemoryInfo = matchedMemory
-		nodeCopy.ContainerCPUInfo = matchedCPU
+		nodeCopy.Containers = matchedContainers
 		filtered = append(filtered, nodeCopy)
 	}
 
@@ -480,26 +468,16 @@ func (m model) resourceLabel() string {
 	return "memory"
 }
 
-func sortMemoryContainers(containers []api.ContainerMemoryInfo, nodeAllocated float64, sortBy sortMode) []api.ContainerMemoryInfo {
+func sortMemoryContainers(containers []api.Container, sortBy sortMode) []api.Container {
 	if len(containers) == 0 {
 		return containers
 	}
 
-	sorted := make([]api.ContainerMemoryInfo, len(containers))
+	sorted := make([]api.Container, len(containers))
 	copy(sorted, containers)
 
-	labelOf := func(c api.ContainerMemoryInfo) string {
-		return strings.ToLower(fmt.Sprintf("%s/%s:%s", c.Namespace, c.Pod, c.Container))
-	}
-
-	effectiveMax := func(c api.ContainerMemoryInfo) float64 {
-		if c.LimitMB > 0 {
-			return c.LimitMB
-		}
-		if nodeAllocated > 0 {
-			return nodeAllocated
-		}
-		return 0
+	labelOf := func(c api.Container) string {
+		return strings.ToLower(fmt.Sprintf("%s/%s:%s", c.Namespace, c.PodName, c.Name))
 	}
 
 	sort.SliceStable(sorted, func(i, j int) bool {
@@ -512,25 +490,24 @@ func sortMemoryContainers(containers []api.ContainerMemoryInfo, nodeAllocated fl
 		case sortByName:
 			return leftLabel < rightLabel
 		case sortByUsage:
-			leftMax := effectiveMax(left)
-			rightMax := effectiveMax(right)
-			leftHasPct := leftMax > 0
-			rightHasPct := rightMax > 0
-			if leftHasPct != rightHasPct {
-				return leftHasPct
+			leftHasUtil := left.MemUtilization != -1
+			rightHasUtil := right.MemUtilization != -1
+			if leftHasUtil != rightHasUtil {
+				return leftHasUtil
 			}
-			if !leftHasPct {
+			leftUsage := bytesToMB(left.MemWorkingSet)
+			rightUsage := bytesToMB(right.MemWorkingSet)
+			if leftHasUtil {
+				leftUsage = left.MemUtilization
+				rightUsage = right.MemUtilization
+			}
+			if leftUsage == rightUsage {
 				return leftLabel < rightLabel
 			}
-			leftPct := left.UsageMB / leftMax
-			rightPct := right.UsageMB / rightMax
-			if leftPct == rightPct {
-				return leftLabel < rightLabel
-			}
-			return leftPct > rightPct
+			return leftUsage > rightUsage
 		case sortByLimit:
-			leftMax := effectiveMax(left)
-			rightMax := effectiveMax(right)
+			leftMax := left.Limits.MemoryByte
+			rightMax := right.Limits.MemoryByte
 			leftHasMax := leftMax > 0
 			rightHasMax := rightMax > 0
 			if leftHasMax != rightHasMax {
@@ -551,26 +528,16 @@ func sortMemoryContainers(containers []api.ContainerMemoryInfo, nodeAllocated fl
 	return sorted
 }
 
-func sortCPUContainers(containers []api.ContainerCPUInfo, nodeAllocated float64, sortBy sortMode) []api.ContainerCPUInfo {
+func sortCPUContainers(containers []api.Container, sortBy sortMode) []api.Container {
 	if len(containers) == 0 {
 		return containers
 	}
 
-	sorted := make([]api.ContainerCPUInfo, len(containers))
+	sorted := make([]api.Container, len(containers))
 	copy(sorted, containers)
 
-	labelOf := func(c api.ContainerCPUInfo) string {
-		return strings.ToLower(fmt.Sprintf("%s/%s:%s", c.Namespace, c.Pod, c.Container))
-	}
-
-	effectiveMax := func(c api.ContainerCPUInfo) float64 {
-		if c.LimitCores > 0 {
-			return c.LimitCores
-		}
-		if nodeAllocated > 0 {
-			return nodeAllocated
-		}
-		return 0
+	labelOf := func(c api.Container) string {
+		return strings.ToLower(fmt.Sprintf("%s/%s:%s", c.Namespace, c.PodName, c.Name))
 	}
 
 	sort.SliceStable(sorted, func(i, j int) bool {
@@ -583,25 +550,24 @@ func sortCPUContainers(containers []api.ContainerCPUInfo, nodeAllocated float64,
 		case sortByName:
 			return leftLabel < rightLabel
 		case sortByUsage:
-			leftMax := effectiveMax(left)
-			rightMax := effectiveMax(right)
-			leftHasPct := leftMax > 0
-			rightHasPct := rightMax > 0
-			if leftHasPct != rightHasPct {
-				return leftHasPct
+			leftHasUtil := left.CPUUtilization != -1
+			rightHasUtil := right.CPUUtilization != -1
+			if leftHasUtil != rightHasUtil {
+				return leftHasUtil
 			}
-			if !leftHasPct {
+			leftUsage := left.CPURate
+			rightUsage := right.CPURate
+			if leftHasUtil {
+				leftUsage = left.CPUUtilization
+				rightUsage = right.CPUUtilization
+			}
+			if leftUsage == rightUsage {
 				return leftLabel < rightLabel
 			}
-			leftPct := left.UsageCores / leftMax
-			rightPct := right.UsageCores / rightMax
-			if leftPct == rightPct {
-				return leftLabel < rightLabel
-			}
-			return leftPct > rightPct
+			return leftUsage > rightUsage
 		case sortByLimit:
-			leftMax := effectiveMax(left)
-			rightMax := effectiveMax(right)
+			leftMax := left.Limits.CPUMillis
+			rightMax := right.Limits.CPUMillis
 			leftHasMax := leftMax > 0
 			rightHasMax := rightMax > 0
 			if leftHasMax != rightHasMax {
@@ -620,6 +586,10 @@ func sortCPUContainers(containers []api.ContainerCPUInfo, nodeAllocated float64,
 	})
 
 	return sorted
+}
+
+func bytesToMB(bytes uint64) float64 {
+	return float64(bytes) / 1024 / 1024
 }
 
 func trimLastRune(s string) string {
@@ -628,18 +598,4 @@ func trimLastRune(s string) string {
 		return s
 	}
 	return string(r[:len(r)-1])
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }

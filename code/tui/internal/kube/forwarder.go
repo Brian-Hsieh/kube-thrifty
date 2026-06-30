@@ -9,12 +9,14 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -25,19 +27,19 @@ import (
 const forwardReadyTimeout = 8 * time.Second
 
 type Forwarder struct {
-	namespace   string
-	selector    string
-	remotePort  int
-	localPort   int
-	config      *rest.Config
-	clientset   *kubernetes.Clientset
-	stopCh      chan struct{}
-	doneCh      chan struct{}
-	running     bool
-	activePod   string
-	lastErr     error
-	stateMu     sync.Mutex
-	startStopMu sync.Mutex
+	namespace    string
+	serviceName  string
+	remotePort   int
+	localPort    int
+	config       *rest.Config
+	clientset    *kubernetes.Clientset
+	stopCh       chan struct{}
+	doneCh       chan struct{}
+	running      bool
+	activeTarget string
+	lastErr      error
+	stateMu      sync.Mutex
+	startStopMu  sync.Mutex
 }
 
 func ResolveKubeconfigPath() (string, error) {
@@ -70,7 +72,7 @@ func ResolveKubeconfigPath() (string, error) {
 	return defaultPath, nil
 }
 
-func NewForwarder(kubeconfigPath, namespace, selector string, remotePort int) (*Forwarder, error) {
+func NewForwarder(kubeconfigPath, namespace, serviceName string, remotePort int) (*Forwarder, error) {
 	config, err := clientcmd.BuildConfigFromFlags("", kubeconfigPath)
 	if err != nil {
 		return nil, fmt.Errorf("unable to load kubeconfig: %w", err)
@@ -81,22 +83,16 @@ func NewForwarder(kubeconfigPath, namespace, selector string, remotePort int) (*
 		return nil, fmt.Errorf("unable to create kube client: %w", err)
 	}
 
-	// ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
-	// defer cancel()
 	if _, err := clientset.Discovery().ServerVersion(); err != nil {
 		return nil, fmt.Errorf("cluster is not reachable: %w", err)
 	}
 
-	// if _, err := pickRunningPod(ctx, clientset, namespace, selector); err != nil {
-	// 	return nil, err
-	// }
-
 	return &Forwarder{
-		namespace:  namespace,
-		selector:   selector,
-		remotePort: remotePort,
-		config:     config,
-		clientset:  clientset,
+		namespace:   namespace,
+		serviceName: serviceName,
+		remotePort:  remotePort,
+		config:      config,
+		clientset:   clientset,
 	}, nil
 }
 
@@ -113,17 +109,17 @@ func (f *Forwarder) Start() error {
 		return fmt.Errorf("unable to allocate local port: %w", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	podName, err := pickRunningPod(ctx, f.clientset, f.namespace, f.selector)
-	if err != nil {
-		return err
-	}
-
 	stopCh := make(chan struct{})
 	readyCh := make(chan struct{})
 	doneCh := make(chan struct{})
 	errCh := make(chan error, 1)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	podName, targetPort, err := f.resolveServiceTarget(ctx)
+	if err != nil {
+		return err
+	}
 
 	serverURL, err := buildPortForwardURL(f.config.Host, f.namespace, podName)
 	if err != nil {
@@ -136,7 +132,7 @@ func (f *Forwarder) Start() error {
 	}
 
 	dialer := spdy.NewDialer(upgrader, &http.Client{Transport: transport}, http.MethodPost, serverURL)
-	ports := []string{fmt.Sprintf("%d:%d", localPort, f.remotePort)}
+	ports := []string{fmt.Sprintf("%d:%d", localPort, targetPort)}
 	forwarder, err := portforward.New(dialer, ports, stopCh, readyCh, io.Discard, io.Discard)
 	if err != nil {
 		return fmt.Errorf("unable to initialize port-forward: %w", err)
@@ -153,7 +149,7 @@ func (f *Forwarder) Start() error {
 		f.stopCh = stopCh
 		f.doneCh = doneCh
 		f.localPort = localPort
-		f.activePod = podName
+		f.activeTarget = fmt.Sprintf("svc/%s -> pod/%s", f.serviceName, podName)
 		f.running = true
 		f.lastErr = nil
 		f.stateMu.Unlock()
@@ -210,10 +206,10 @@ func (f *Forwarder) LocalPort() int {
 	return f.localPort
 }
 
-func (f *Forwarder) ActivePod() string {
+func (f *Forwarder) ActiveTarget() string {
 	f.stateMu.Lock()
 	defer f.stateMu.Unlock()
-	return f.activePod
+	return f.activeTarget
 }
 
 func (f *Forwarder) isRunning() bool {
@@ -233,28 +229,82 @@ func (f *Forwarder) isRunning() bool {
 	}
 }
 
-func pickRunningPod(ctx context.Context, clientset *kubernetes.Clientset, namespace, selector string) (string, error) {
-	pods, err := clientset.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{LabelSelector: selector})
+func (f *Forwarder) resolveServiceTarget(ctx context.Context) (string, int, error) {
+	service, err := f.clientset.CoreV1().Services(f.namespace).Get(ctx, f.serviceName, metav1.GetOptions{})
 	if err != nil {
-		return "", fmt.Errorf("unable to list pods for %s in namespace %s: %w", selector, namespace, err)
+		return "", 0, fmt.Errorf("unable to get service %s in namespace %s: %w", f.serviceName, f.namespace, err)
 	}
 
-	for _, pod := range pods.Items {
+	servicePort, err := findServicePort(service, f.remotePort)
+	if err != nil {
+		return "", 0, err
+	}
+
+	selector := labelsFromSelector(service.Spec.Selector)
+	if selector == "" {
+		return "", 0, fmt.Errorf("service %s has no selector", f.serviceName)
+	}
+
+	pod, err := pickRunningPod(ctx, f.clientset, f.namespace, selector)
+	if err != nil {
+		return "", 0, err
+	}
+
+	targetPort, err := resolveTargetPort(servicePort.TargetPort, pod)
+	if err != nil {
+		return "", 0, fmt.Errorf("unable to resolve target port for service %s: %w", f.serviceName, err)
+	}
+
+	return pod.Name, targetPort, nil
+}
+
+func findServicePort(service *corev1.Service, remotePort int) (corev1.ServicePort, error) {
+	for _, port := range service.Spec.Ports {
+		if int(port.Port) == remotePort {
+			return port, nil
+		}
+	}
+
+	return corev1.ServicePort{}, fmt.Errorf("service %s has no port %d", service.Name, remotePort)
+}
+
+func labelsFromSelector(selector map[string]string) string {
+	if len(selector) == 0 {
+		return ""
+	}
+
+	parts := make([]string, 0, len(selector))
+	for key, value := range selector {
+		parts = append(parts, fmt.Sprintf("%s=%s", key, value))
+	}
+	sort.Strings(parts)
+	return strings.Join(parts, ",")
+}
+
+func pickRunningPod(ctx context.Context, clientset *kubernetes.Clientset, namespace, selector string) (*corev1.Pod, error) {
+	pods, err := clientset.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{LabelSelector: selector})
+	if err != nil {
+		return nil, fmt.Errorf("unable to list pods for %s in namespace %s: %w", selector, namespace, err)
+	}
+
+	for i := range pods.Items {
+		pod := &pods.Items[i]
 		if pod.Status.Phase != corev1.PodRunning {
 			continue
 		}
 		if podReady(pod.Status.Conditions) {
-			return pod.Name, nil
+			return pod, nil
 		}
 	}
 
-	for _, pod := range pods.Items {
+	for i := range pods.Items {
+		pod := &pods.Items[i]
 		if pod.Status.Phase == corev1.PodRunning {
-			return pod.Name, nil
+			return pod, nil
 		}
 	}
 
-	return "", fmt.Errorf("no running kube-thrifty pod found in namespace %s", namespace)
+	return nil, fmt.Errorf("no running pod found for selector %s in namespace %s", selector, namespace)
 }
 
 func podReady(conditions []corev1.PodCondition) bool {
@@ -264,6 +314,22 @@ func podReady(conditions []corev1.PodCondition) bool {
 		}
 	}
 	return false
+}
+
+func resolveTargetPort(targetPort intstr.IntOrString, pod *corev1.Pod) (int, error) {
+	if targetPort.Type == intstr.Int {
+		return targetPort.IntValue(), nil
+	}
+
+	for _, container := range pod.Spec.Containers {
+		for _, port := range container.Ports {
+			if port.Name == targetPort.StrVal {
+				return int(port.ContainerPort), nil
+			}
+		}
+	}
+
+	return 0, fmt.Errorf("named target port %q not found on pod %s", targetPort.StrVal, pod.Name)
 }
 
 func buildPortForwardURL(host, namespace, podName string) (*url.URL, error) {

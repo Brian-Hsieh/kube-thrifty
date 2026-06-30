@@ -12,10 +12,10 @@ import (
 )
 
 const (
-	namespace     = "kube-thrifty"
-	labelSelector = "app=kube-thrifty"
-	remotePort    = 8080
-	tickInterval  = 5 * time.Second
+	namespace    = "kube-thrifty"
+	serviceName  = "kube-thrifty-metrics-service"
+	remotePort   = 8080
+	tickInterval = 5 * time.Second
 )
 
 func main() {
@@ -24,7 +24,7 @@ func main() {
 		exitWithMessage(err.Error())
 	}
 
-	forwarder, err := kube.NewForwarder(kubeconfigPath, namespace, labelSelector, remotePort)
+	forwarder, err := kube.NewForwarder(kubeconfigPath, namespace, serviceName, remotePort)
 	if err != nil {
 		exitWithMessage(err.Error())
 	}

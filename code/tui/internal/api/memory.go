@@ -10,28 +10,35 @@ import (
 )
 
 type Node struct {
-	Name                string                `json:"name"`
-	InternalIP          string                `json:"internal_ip"`
-	ContainerMemoryInfo []ContainerMemoryInfo `json:"container_memory_info"`
-	ContainerCPUInfo    []ContainerCPUInfo    `json:"container_cpu_info"`
-	AllocatedMemoryMB   float64               `json:"allocated_memory_mb"`
-	AllocatedCPUCores   float64               `json:"allocated_cpu_cores"`
+	Name       string      `json:"node"`
+	CPUPercent float64     `json:"cpu_pct"`
+	MemUsed    uint64      `json:"mem_used"`
+	MemTotal   uint64      `json:"mem_total"`
+	UpdatedAt  int64       `json:"updated_at"`
+	Containers []Container `json:"containers"`
 }
 
-type ContainerCPUInfo struct {
-	Namespace  string  `json:"namespace"`
-	Pod        string  `json:"pod"`
-	Container  string  `json:"container"`
-	UsageCores float64 `json:"usage_cores"`
-	LimitCores float64 `json:"limit_cores"`
+type ResourceSpec struct {
+	CPUMillis  int64 `json:"cpu_millis"`
+	MemoryByte int64 `json:"memory_bytes"`
 }
 
-type ContainerMemoryInfo struct {
-	Namespace string  `json:"namespace"`
-	Pod       string  `json:"pod"`
-	Container string  `json:"container"`
-	UsageMB   float64 `json:"usage_mb"`
-	LimitMB   float64 `json:"limit_mb"`
+type Container struct {
+	Name              string  `json:"container"`
+	Namespace         string  `json:"namespace"`
+	PodName           string  `json:"pod"`
+	CPUUsageSeconds   float64 `json:"cpu_usage_seconds"`
+	CPUThrottledRatio float64 `json:"cpu_throttled_ratio"`
+	MemWorkingSet     uint64  `json:"mem_working_set"`
+	MemResidentSet    uint64  `json:"mem_resident_set"`
+	OOM               uint64  `json:"oom"`
+
+	CPURate        float64 `json:"cpu_rate"`
+	CPUUtilization float64 `json:"cpu_utilization"`
+	MemUtilization float64 `json:"mem_utilization"`
+
+	Requests ResourceSpec `json:"requests"`
+	Limits   ResourceSpec `json:"limits"`
 }
 
 var defaultHTTPClient = &http.Client{Timeout: 5 * time.Second}
@@ -42,7 +49,7 @@ func FetchMemory(ctx context.Context, localPort int) ([]Node, error) {
 	}
 
 	// TODO: make var for endpoint
-	url := fmt.Sprintf("http://127.0.0.1:%d/v2/metrics", localPort)
+	url := fmt.Sprintf("http://127.0.0.1:%d/v3/metrics", localPort)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
