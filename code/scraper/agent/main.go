@@ -319,7 +319,15 @@ func (ch *cpuHistory) rate(k string, usage float64, t time.Time) float64 {
 	return (usage - prev.usage) / duration * 1000
 }
 
-func collect(ctx context.Context, nodeName string, kc *kubeletClient, sc *specCache, ch *cpuHistory) (*gen.NodeSnapshot, error) {
+type agent struct {
+	msClient gen.MetricsScraperClient
+	nodeName string
+	kc       *kubeletClient
+	sc       *specCache
+	ch       *cpuHistory
+}
+
+func (a *agent) collect(ctx context.Context) (*gen.NodeSnapshot, error) {
 	defer profiler.Perf()()
 
 	// node-level
@@ -334,7 +342,7 @@ func collect(ctx context.Context, nodeName string, kc *kubeletClient, sc *specCa
 	}
 
 	// container-level
-	mfs, err := kc.scrape(ctx)
+	mfs, err := a.kc.scrape(ctx)
 	if err != nil {
 		log.Printf("warn: kubelet summary: %v", err)
 		mfs = map[string]*dto.MetricFamily{}
@@ -348,7 +356,7 @@ func collect(ctx context.Context, nodeName string, kc *kubeletClient, sc *specCa
 	oom := generateMetricsMap(mfs[ContainerOOM])
 
 	snap := &gen.NodeSnapshot{
-		NodeName:   nodeName,
+		NodeName:   a.nodeName,
 		CpuPercent: cpuPer[0],
 		MemUsed:    vm.Used,
 		MemTotal:   vm.Total,
@@ -366,7 +374,7 @@ func collect(ctx context.Context, nodeName string, kc *kubeletClient, sc *specCa
 		requests := &gen.ResourceSpec{}
 		limits := &gen.ResourceSpec{}
 
-		cs, hasSpec := sc.get(k)
+		cs, hasSpec := a.sc.get(k)
 		if hasSpec {
 			requests = &gen.ResourceSpec{
 				CpuMillis:   cs.request.cpuMilli,
@@ -378,7 +386,7 @@ func collect(ctx context.Context, nodeName string, kc *kubeletClient, sc *specCa
 			}
 		}
 
-		cpuRateMillis := ch.rate(k, usage, time.Now())
+		cpuRateMillis := a.ch.rate(k, usage, time.Now())
 
 		cpuUtilization := -1.0
 		memUtilization := -1.0
@@ -416,10 +424,10 @@ func collect(ctx context.Context, nodeName string, kc *kubeletClient, sc *specCa
 	return snap, nil
 }
 
-func stream(client gen.MetricsScraperClient, nodeName string, kc *kubeletClient, sc *specCache, ch *cpuHistory) error {
+func (a *agent) stream() error {
 	ctx := context.Background()
 
-	s, err := client.StreamMetrics(ctx, grpc.WaitForReady(true))
+	s, err := a.msClient.StreamMetrics(ctx, grpc.WaitForReady(true))
 	if err != nil {
 		return err
 	}
@@ -429,7 +437,8 @@ func stream(client gen.MetricsScraperClient, nodeName string, kc *kubeletClient,
 
 	for range ticker.C {
 		scrapeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-		snap, err := collect(scrapeCtx, nodeName, kc, sc, ch)
+
+		snap, err := a.collect(scrapeCtx)
 		cancel()
 
 		if err != nil {
@@ -481,7 +490,6 @@ func main() {
 	defer cancel()
 
 	sc := newSpecCache()
-	ch := newCPUHistory()
 
 	if err := startPodInformers(ctx, nodeName, sc); err != nil {
 		log.Fatalf("pod informer: %v", err)
@@ -493,14 +501,22 @@ func main() {
 	}
 	defer conn.Close()
 
-	client := gen.NewMetricsScraperClient(conn)
+	msClient := gen.NewMetricsScraperClient(conn)
 	kc, err := newKubeletClient(nodeIP)
 	if err != nil {
 		log.Fatalf("Critical: failed getting in-cluster config: %v\n", err)
 	}
 
+	agent := &agent{
+		msClient: msClient,
+		nodeName: nodeName,
+		kc:       kc,
+		sc:       sc,
+		ch:       newCPUHistory(),
+	}
+
 	for {
-		if err := stream(client, nodeName, kc, sc, ch); err != nil {
+		if err := agent.stream(); err != nil {
 			log.Printf("stream error: %v -- retry in 3s", err)
 			time.Sleep(3 * time.Second)
 		}
