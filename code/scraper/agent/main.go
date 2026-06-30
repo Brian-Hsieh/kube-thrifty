@@ -403,6 +403,7 @@ func collect(ctx context.Context, nodeName string, kc *kubeletClient, sc *specCa
 			MemWss:            uint64(memWSS[k]),
 			MemRss:            uint64(memRSS[k]),
 			OomEvents:         uint64(oom[k]),
+			CpuRate:           cpuRateMillis,
 			CpuUtilization:    cpuUtilization,
 			MemUtilization:    memUtilization,
 			Requests:          requests,

@@ -29,13 +29,16 @@ message ContainerMetrics {
   uint64 mem_rss = 7;
   uint64 oom_events = 8;
 
+  // cpu rate
+  double cpu_rate = 9;
+
   // utilizaiton
-  double cpu_utilization = 9;
-  double mem_utilization = 10;
+  double cpu_utilization = 10;
+  double mem_utilization = 11;
 
   // k8s resource spec
-  ResourceSpec limits = 11;
-  ResourceSpec requests = 12;
+  ResourceSpec limits = 12;
+  ResourceSpec requests = 13;
 }
 
 message ResourceSpec {

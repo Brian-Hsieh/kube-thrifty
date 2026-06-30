@@ -117,12 +117,14 @@ type ContainerMetrics struct {
 	MemWss            uint64  `protobuf:"varint,6,opt,name=mem_wss,json=memWss,proto3" json:"mem_wss,omitempty"`
 	MemRss            uint64  `protobuf:"varint,7,opt,name=mem_rss,json=memRss,proto3" json:"mem_rss,omitempty"`
 	OomEvents         uint64  `protobuf:"varint,8,opt,name=oom_events,json=oomEvents,proto3" json:"oom_events,omitempty"`
+	// cpu rate
+	CpuRate float64 `protobuf:"fixed64,9,opt,name=cpu_rate,json=cpuRate,proto3" json:"cpu_rate,omitempty"`
 	// utilizaiton
-	CpuUtilization float64 `protobuf:"fixed64,9,opt,name=cpu_utilization,json=cpuUtilization,proto3" json:"cpu_utilization,omitempty"`
-	MemUtilization float64 `protobuf:"fixed64,10,opt,name=mem_utilization,json=memUtilization,proto3" json:"mem_utilization,omitempty"`
+	CpuUtilization float64 `protobuf:"fixed64,10,opt,name=cpu_utilization,json=cpuUtilization,proto3" json:"cpu_utilization,omitempty"`
+	MemUtilization float64 `protobuf:"fixed64,11,opt,name=mem_utilization,json=memUtilization,proto3" json:"mem_utilization,omitempty"`
 	// k8s resource spec
-	Limits        *ResourceSpec `protobuf:"bytes,11,opt,name=limits,proto3" json:"limits,omitempty"`
-	Requests      *ResourceSpec `protobuf:"bytes,12,opt,name=requests,proto3" json:"requests,omitempty"`
+	Limits        *ResourceSpec `protobuf:"bytes,12,opt,name=limits,proto3" json:"limits,omitempty"`
+	Requests      *ResourceSpec `protobuf:"bytes,13,opt,name=requests,proto3" json:"requests,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -209,6 +211,13 @@ func (x *ContainerMetrics) GetMemRss() uint64 {
 func (x *ContainerMetrics) GetOomEvents() uint64 {
 	if x != nil {
 		return x.OomEvents
+	}
+	return 0
+}
+
+func (x *ContainerMetrics) GetCpuRate() float64 {
+	if x != nil {
+		return x.CpuRate
 	}
 	return 0
 }
@@ -351,7 +360,7 @@ const file_metrics_proto_rawDesc = "" +
 	"\ttimestamp\x18\x05 \x01(\x03R\ttimestamp\x129\n" +
 	"\n" +
 	"containers\x18\x06 \x03(\v2\x19.metrics.ContainerMetricsR\n" +
-	"containers\"\xd3\x03\n" +
+	"containers\"\xee\x03\n" +
 	"\x10ContainerMetrics\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x19\n" +
 	"\bpod_name\x18\x02 \x01(\tR\apodName\x12%\n" +
@@ -361,12 +370,13 @@ const file_metrics_proto_rawDesc = "" +
 	"\amem_wss\x18\x06 \x01(\x04R\x06memWss\x12\x17\n" +
 	"\amem_rss\x18\a \x01(\x04R\x06memRss\x12\x1d\n" +
 	"\n" +
-	"oom_events\x18\b \x01(\x04R\toomEvents\x12'\n" +
-	"\x0fcpu_utilization\x18\t \x01(\x01R\x0ecpuUtilization\x12'\n" +
-	"\x0fmem_utilization\x18\n" +
-	" \x01(\x01R\x0ememUtilization\x12-\n" +
-	"\x06limits\x18\v \x01(\v2\x15.metrics.ResourceSpecR\x06limits\x121\n" +
-	"\brequests\x18\f \x01(\v2\x15.metrics.ResourceSpecR\brequests\"P\n" +
+	"oom_events\x18\b \x01(\x04R\toomEvents\x12\x19\n" +
+	"\bcpu_rate\x18\t \x01(\x01R\acpuRate\x12'\n" +
+	"\x0fcpu_utilization\x18\n" +
+	" \x01(\x01R\x0ecpuUtilization\x12'\n" +
+	"\x0fmem_utilization\x18\v \x01(\x01R\x0ememUtilization\x12-\n" +
+	"\x06limits\x18\f \x01(\v2\x15.metrics.ResourceSpecR\x06limits\x121\n" +
+	"\brequests\x18\r \x01(\v2\x15.metrics.ResourceSpecR\brequests\"P\n" +
 	"\fResourceSpec\x12\x1d\n" +
 	"\n" +
 	"cpu_millis\x18\x01 \x01(\x03R\tcpuMillis\x12!\n" +
