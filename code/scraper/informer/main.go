@@ -52,13 +52,35 @@ type nodeSnapshot struct {
 }
 
 type cache struct {
-	mu   sync.RWMutex
-	data map[string]*nodeSnapshot
+	mu          sync.RWMutex
+	muIdx       sync.RWMutex
+	index       map[string]int
+	data        []*nodeSnapshot
+	lastUpdated time.Time
+}
+
+// TODO: we have to deal with the problem when a node is killed and never recovered
+func (c *cache) getIdx(nodeName string) int {
+	c.muIdx.Lock()
+	defer c.muIdx.Unlock()
+
+	idx, ok := c.index[nodeName]
+	if !ok {
+		idx = len(c.data)
+		c.index[nodeName] = idx
+	}
+	return idx
 }
 
 func (c *cache) set(ns *nodeSnapshot) {
 	c.mu.Lock()
-	c.data[ns.NodeName] = ns
+	idx := c.getIdx(ns.NodeName)
+	if len(c.data) <= idx {
+		c.data = append(c.data, ns)
+	} else {
+		c.data[idx] = ns
+	}
+	c.lastUpdated = time.Now()
 	c.mu.Unlock()
 }
 
@@ -124,7 +146,7 @@ func (s *server) StreamMetrics(stream gen.MetricsScraper_StreamMetricsServer) er
 }
 
 func main() {
-	c := &cache{data: make(map[string]*nodeSnapshot)}
+	c := &cache{index: make(map[string]int)}
 
 	lis, err := net.Listen("tcp", ":50051")
 	if err != nil {
