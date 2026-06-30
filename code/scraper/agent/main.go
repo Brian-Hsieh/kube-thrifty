@@ -35,7 +35,7 @@ import (
 
 var profiler *utils.Profiler
 
-const ScrapeInterval = 500 * time.Millisecond
+const ScrapeInterval = 10 * time.Second
 
 const (
 	ContainerCPUUsage     string = "container_cpu_usage_seconds_total"
@@ -485,6 +485,10 @@ func main() {
 	addr := os.Getenv("INFORMER_ADDR")
 	nodeName := os.Getenv("NODE_NAME")
 	nodeIP := os.Getenv("NODE_IP")
+
+	if nodeName == "" {
+		log.Fatalln("node name not found. pls provide node name in env")
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
