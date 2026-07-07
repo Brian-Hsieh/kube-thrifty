@@ -35,7 +35,7 @@ func NewStyles() Styles {
 func ProgressBar(value float64, width int) string {
 	width -= 2 // 2 braces
 	filled := int(math.Round(float64(width) * value))
-	filled = min(filled, width)
+	filled = max(0, min(filled, width))
 	return fmt.Sprintf("[%s%s]", strings.Repeat("=", filled), strings.Repeat("-", width-filled))
 }
 
