@@ -208,6 +208,8 @@ func (m model) View() string {
 	header := m.styles.Title.Render("Kube-Thrifty") + "  " + m.statusLine()
 	menu := m.styles.Muted.Render("j/k navigate  q quit  s sort  / filter  c cpu  m memory  ? help")
 
+	inputLine := m.renderInputBuffer()
+
 	leftWidth := max(26, m.width/4)
 	rightWidth := max(40, m.width-leftWidth-3)
 
@@ -215,9 +217,7 @@ func (m model) View() string {
 	detailPanel := m.styles.Panel.Width(rightWidth - 2).Render(m.renderDetails(rightWidth - 4))
 	body := lipgloss.JoinHorizontal(lipgloss.Top, nodePanel, detailPanel)
 
-	inputLine := m.renderInputBuffer()
-
-	return lipgloss.JoinVertical(lipgloss.Left, header, menu, "", body, "", inputLine)
+	return lipgloss.JoinVertical(lipgloss.Left, header, menu, "", inputLine, body)
 }
 
 func (m model) statusLine() string {
@@ -279,14 +279,13 @@ func (m model) renderDetails(width int) string {
 	var lines []string
 	node := m.visibleNodes[m.selected]
 	title := fmt.Sprintf("%%s on Node: %s", node.Name)
-	// TODO: refactor: move this out
+
 	labelWidth := 32
-	barWidth := max(10, (width-labelWidth)*3/5)
-	perWidth := 7
-	barAndPerWidth := barWidth + perWidth
+	barWidth := max(10, min(20, (width-labelWidth)*3/5))
+	utilWidth := barWidth + 7
 	formatter := "%-*s %-*s %s"
 	legend := func(valueHeader string) string {
-		return fmt.Sprintf(formatter, labelWidth, "ns/pod:container", barAndPerWidth, "Utilization bar (%)", valueHeader)
+		return fmt.Sprintf(formatter, labelWidth, "ns/pod:container", utilWidth, "Utilization", valueHeader)
 	}
 
 	if m.resource == resourceCPU {
@@ -309,15 +308,16 @@ func (m model) renderDetails(width int) string {
 				valueText = fmt.Sprintf("%.0f", c.CPURate)
 			}
 
-			var bar string
+			var util string
 			if c.CPUUtilization != -1 {
-				bar = ui.ProgressBar(c.CPUUtilization, barWidth)
-				bar = bar + fmt.Sprintf(" %-*s", perWidth-1, fmt.Sprintf("%.1f%%", c.CPUUtilization*100))
+				bar := ui.ProgressBar(c.CPUUtilization, barWidth)
+				util = fmt.Sprintf("%-*s", utilWidth,
+					fmt.Sprintf("%s %s", bar, fmt.Sprintf("%.1f%%", c.CPUUtilization*100)))
 			} else {
-				bar = ui.EmptyProgressBar(barWidth) + fmt.Sprintf(" %-*s", perWidth-1, "")
+				util = fmt.Sprintf("%-*s", utilWidth, "N/A")
 			}
 
-			line := fmt.Sprintf(formatter, labelWidth, label, barAndPerWidth, bar, valueText)
+			line := fmt.Sprintf(formatter, labelWidth, label, utilWidth, util, valueText)
 			lines = append(lines, m.styles.BarLabel.Render(line))
 		}
 
@@ -341,15 +341,15 @@ func (m model) renderDetails(width int) string {
 		memMB := bytesToMB(c.MemWorkingSet)
 		valueText := fmt.Sprintf("%.1f", memMB)
 
-		var bar string
+		var util string
 		if c.MemUtilization != -1 {
-			bar = ui.ProgressBar(c.MemUtilization, barWidth)
-			bar = bar + fmt.Sprintf(" %-*s", perWidth-1, fmt.Sprintf("%.1f%%", c.MemUtilization*100))
+			bar := ui.ProgressBar(c.MemUtilization, barWidth)
+			util = fmt.Sprintf("%-*s", utilWidth, fmt.Sprintf("%s %s", bar, fmt.Sprintf("%.1f%%", c.MemUtilization*100)))
 		} else {
-			bar = ui.EmptyProgressBar(barWidth) + fmt.Sprintf(" %-*s", perWidth-1, "")
+			util = fmt.Sprintf("%-*s", utilWidth, "N/A")
 		}
 
-		line := fmt.Sprintf(formatter, labelWidth, label, barAndPerWidth, bar, valueText)
+		line := fmt.Sprintf(formatter, labelWidth, label, utilWidth, util, valueText)
 		lines = append(lines, m.styles.BarLabel.Render(line))
 	}
 
