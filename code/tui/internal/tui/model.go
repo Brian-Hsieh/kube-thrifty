@@ -46,6 +46,12 @@ type fetchResultMsg struct {
 	err       error
 }
 
+type metricColumn struct {
+	header string
+	width  int
+	value  func(api.Container) string
+}
+
 type tickMsg struct{}
 
 type model struct {
@@ -276,84 +282,161 @@ func (m model) renderDetails(width int) string {
 		return m.styles.Subtle.Render("No node selected")
 	}
 
-	var lines []string
 	node := m.visibleNodes[m.selected]
-	title := fmt.Sprintf("%%s on Node: %s", node.Name)
-
-	labelWidth := 32
-	barWidth := max(10, min(20, (width-labelWidth)*3/5))
-	utilWidth := barWidth + 7
-	formatter := "%-*s %-*s %s"
-	legend := func(valueHeader string) string {
-		return fmt.Sprintf(formatter, labelWidth, "ns/pod:container", utilWidth, "Utilization", valueHeader)
-	}
 
 	if m.resource == resourceCPU {
 		containers := sortCPUContainers(node.Containers, m.sortBy)
-		if len(containers) == 0 {
-			return m.styles.Subtle.Render("No container cpu data on selected node")
-		}
-
-		lines = append(lines, m.styles.Subtle.Render(fmt.Sprintf(title, "CPU")), "")
-		lines = append(lines, m.styles.Subtle.Render(legend("Rate(mCPU)")), "")
-
-		for _, c := range containers {
-			label := fmt.Sprintf("%s/%s:%s", c.Namespace, c.PodName, c.Name)
-			if len(label) > labelWidth {
-				label = label[:labelWidth-3] + "..."
-			}
-
-			valueText := "<1"
-			if c.CPURate > 0 {
-				valueText = fmt.Sprintf("%.0f", c.CPURate)
-			}
-
-			var util string
-			if c.CPUUtilization != -1 {
-				bar := ui.ProgressBar(c.CPUUtilization, barWidth)
-				util = fmt.Sprintf("%-*s", utilWidth,
-					fmt.Sprintf("%s %s", bar, fmt.Sprintf("%.1f%%", c.CPUUtilization*100)))
-			} else {
-				util = fmt.Sprintf("%-*s", utilWidth, "N/A")
-			}
-
-			line := fmt.Sprintf(formatter, labelWidth, label, utilWidth, util, valueText)
-			lines = append(lines, m.styles.BarLabel.Render(line))
-		}
-
-		return strings.Join(lines, "\n")
+		return m.renderContainerTable(
+			width,
+			node.Name,
+			"CPU",
+			"No container cpu data on selected node",
+			containers,
+			cpuMetricColumns(),
+			func(c api.Container) float64 {
+				return c.CPUUtilization
+			})
 	}
 
 	containers := sortMemoryContainers(node.Containers, m.sortBy)
+	return m.renderContainerTable(
+		width,
+		node.Name,
+		"Memory",
+		"No container memory data on selected node",
+		containers,
+		memoryMetricColumns(),
+		func(c api.Container) float64 {
+			return c.MemUtilization
+		})
+}
+
+func (m model) renderContainerTable(width int, nodeName string, title string, emptyMessage string, containers []api.Container, columns []metricColumn, utilization func(api.Container) float64) string {
 	if len(containers) == 0 {
-		return m.styles.Subtle.Render("No container memory data on selected node")
+		return m.styles.Subtle.Render(emptyMessage)
 	}
 
-	lines = append(lines, m.styles.Subtle.Render(fmt.Sprintf(title, "Memory")), "")
-	lines = append(lines, m.styles.Subtle.Render(legend("WSS(MB)")), "")
+	metricWidths := metricColumnWidths(columns)
+	metricWidth := metricColumnsWidth(metricWidths)
+	labelWidth := max(12, min(32, (width-metricWidth-1)/2))
+	utilWidth := max(6, width-labelWidth-metricWidth-1)
+
+	lines := []string{
+		m.styles.Subtle.Render(fmt.Sprintf("%s on Node: %s", title, nodeName)),
+		"",
+		m.styles.Subtle.Render(renderTableHeader(labelWidth, utilWidth, columns, metricWidths)),
+		"",
+	}
 
 	for _, c := range containers {
-		label := fmt.Sprintf("%s/%s:%s", c.Namespace, c.PodName, c.Name)
-		if len(label) > labelWidth {
-			label = label[:labelWidth-3] + "..."
+		values := make([]string, 0, len(columns))
+		for _, column := range columns {
+			values = append(values, column.value(c))
 		}
 
-		memMB := bytesToMB(c.MemWorkingSet)
-		valueText := fmt.Sprintf("%.1f", memMB)
-
-		var util string
-		if c.MemUtilization != -1 {
-			bar := ui.ProgressBar(c.MemUtilization, barWidth)
-			util = fmt.Sprintf("%-*s", utilWidth, fmt.Sprintf("%s %s", bar, fmt.Sprintf("%.1f%%", c.MemUtilization*100)))
-		} else {
-			util = fmt.Sprintf("%-*s", utilWidth, "N/A")
-		}
-
-		line := fmt.Sprintf(formatter, labelWidth, label, utilWidth, util, valueText)
+		line := renderTableRow(
+			truncate(containerLabel(c), labelWidth),
+			formatUtilization(utilization(c), utilWidth),
+			values,
+			labelWidth,
+			utilWidth,
+			metricWidths,
+		)
 		lines = append(lines, m.styles.BarLabel.Render(line))
 	}
 
 	return strings.Join(lines, "\n")
+}
+
+func cpuMetricColumns() []metricColumn {
+	return []metricColumn{
+		{header: "Rate(mCPU)", width: 10, value: func(c api.Container) string { return formatCPURate(c.CPURate) }},
+		{header: "Throttle", width: 8, value: func(c api.Container) string { return formatRatioPercent(c.CPUThrottledRatio) }},
+	}
+}
+
+func memoryMetricColumns() []metricColumn {
+	return []metricColumn{
+		{header: "WSS(MB)", width: 7, value: func(c api.Container) string { return formatMB(c.MemWorkingSet) }},
+		{header: "RSS(MB)", width: 7, value: func(c api.Container) string { return formatMB(c.MemResidentSet) }},
+		{header: "OOM", width: 3, value: func(c api.Container) string { return fmt.Sprintf("%d", c.OOM) }},
+	}
+}
+
+func metricColumnWidths(columns []metricColumn) []int {
+	widths := make([]int, 0, len(columns))
+	for _, column := range columns {
+		widths = append(widths, max(column.width, len(column.header)))
+	}
+	return widths
+}
+
+func metricColumnsWidth(widths []int) int {
+	total := 0
+	for _, width := range widths {
+		total += width + 1
+	}
+	return total
+}
+
+func renderTableHeader(labelWidth int, utilWidth int, columns []metricColumn, metricWidths []int) string {
+	values := make([]string, 0, len(columns))
+	for _, column := range columns {
+		values = append(values, column.header)
+	}
+	return renderTableRow("ns/pod:container", "Utilization", values, labelWidth, utilWidth, metricWidths)
+}
+
+func renderTableRow(label string, utilization string, values []string, labelWidth int, utilWidth int, metricWidths []int) string {
+	var row strings.Builder
+	fmt.Fprintf(&row, "%-*s %-*s", labelWidth, label, utilWidth, utilization)
+	for i, value := range values {
+		fmt.Fprintf(&row, " %*s", metricWidths[i], value)
+	}
+	return row.String()
+}
+
+func containerLabel(c api.Container) string {
+	return fmt.Sprintf("%s/%s:%s", c.Namespace, c.PodName, c.Name)
+}
+
+func truncate(s string, width int) string {
+	if width <= 3 || len(s) <= width {
+		return s
+	}
+	return s[:width-3] + "..."
+}
+
+func formatUtilization(value float64, width int) string {
+	if value == -1 {
+		return fmt.Sprintf("%-*s", width, "N/A")
+	}
+
+	percent := formatRatioPercent(value)
+	if width < 18 {
+		return fmt.Sprintf("%-*s", width, percent)
+	}
+
+	barWidth := max(10, width-len(percent)-1)
+	return fmt.Sprintf("%-*s", width, fmt.Sprintf("%s %s", ui.ProgressBar(value, barWidth), percent))
+}
+
+func formatCPURate(rate float64) string {
+	if rate < 1 {
+		return "<1"
+	}
+	return fmt.Sprintf("%.0f", rate)
+}
+
+func formatRatioPercent(value float64) string {
+	if value < 0 {
+		return "N/A"
+	}
+	return fmt.Sprintf("%.1f%%", value*100)
+}
+
+func formatMB(bytes uint64) string {
+	return fmt.Sprintf("%.1f", bytesToMB(bytes))
 }
 
 func (m model) renderInputBuffer() string {
