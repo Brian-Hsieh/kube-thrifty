@@ -217,9 +217,8 @@ func (m model) View() string {
 	status := m.statusLine()
 	header := title + lipgloss.PlaceHorizontal(contentWidth-lipgloss.Width(title), lipgloss.Right, status)
 
-	menu := m.styles.Muted.Render("j/k navigate  q quit  s sort  / filter  c cpu  m memory  ? help")
-
 	inputLine := m.renderInputBuffer()
+	subheader := inputLine + lipgloss.PlaceHorizontal(contentWidth-lipgloss.Width(inputLine), lipgloss.Right, m.styles.Muted.Render("? help"))
 
 	leftWidth := max(26, contentWidth/4)
 	rightWidth := max(40, contentWidth-leftWidth)
@@ -228,7 +227,7 @@ func (m model) View() string {
 	detailPanel := m.styles.Panel.Width(rightWidth - 2).Render(m.renderDetails(rightWidth - 4))
 	body := lipgloss.JoinHorizontal(lipgloss.Top, nodePanel, detailPanel)
 
-	return m.styles.AppPanel.Render(lipgloss.JoinVertical(lipgloss.Left, header, menu, "", inputLine, body))
+	return m.styles.AppPanel.Render(lipgloss.JoinVertical(lipgloss.Left, header, "", subheader, body))
 }
 
 func (m model) statusLine() string {
@@ -450,7 +449,7 @@ func (m model) renderInputBuffer() string {
 	case modeFilterPrompt:
 		return m.styles.Subtle.Render(fmt.Sprintf("Filter (Namespace/Pod):%s", m.filterInput))
 	case modeHelp:
-		return m.styles.Subtle.Render("Help: j/k move  s sort  / filter(live)  c cpu  m memory  Enter apply  Esc cancel/close  q quit")
+		return m.styles.Subtle.Render("<Help Menu> j/k: move  s: sort  /: filter(live)  c: cpu  m: memory  Esc: cancel/close  q: quit")
 	default:
 		parts := []string{}
 		parts = append(parts, "view: "+m.resourceLabel())
