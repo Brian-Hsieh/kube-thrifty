@@ -27,19 +27,18 @@ import (
 const forwardReadyTimeout = 8 * time.Second
 
 type Forwarder struct {
-	namespace    string
-	serviceName  string
-	remotePort   int
-	localPort    int
-	config       *rest.Config
-	clientset    *kubernetes.Clientset
-	stopCh       chan struct{}
-	doneCh       chan struct{}
-	running      bool
-	activeTarget string
-	lastErr      error
-	stateMu      sync.Mutex
-	startStopMu  sync.Mutex
+	namespace   string
+	serviceName string
+	remotePort  int
+	localPort   int
+	config      *rest.Config
+	clientset   *kubernetes.Clientset
+	stopCh      chan struct{}
+	doneCh      chan struct{}
+	running     bool
+	lastErr     error
+	stateMu     sync.Mutex
+	startStopMu sync.Mutex
 }
 
 func ResolveKubeconfigPath() (string, error) {
@@ -149,7 +148,6 @@ func (f *Forwarder) Start() error {
 		f.stopCh = stopCh
 		f.doneCh = doneCh
 		f.localPort = localPort
-		f.activeTarget = fmt.Sprintf("svc/%s -> pod/%s", f.serviceName, podName)
 		f.running = true
 		f.lastErr = nil
 		f.stateMu.Unlock()
@@ -204,12 +202,6 @@ func (f *Forwarder) LocalPort() int {
 	f.stateMu.Lock()
 	defer f.stateMu.Unlock()
 	return f.localPort
-}
-
-func (f *Forwarder) ActiveTarget() string {
-	f.stateMu.Lock()
-	defer f.stateMu.Unlock()
-	return f.activeTarget
 }
 
 func (f *Forwarder) isRunning() bool {

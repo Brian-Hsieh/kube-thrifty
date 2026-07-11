@@ -233,7 +233,6 @@ func (m model) View() string {
 
 func (m model) statusLine() string {
 	parts := []string{}
-	parts = append(parts, m.styles.Subtle.Render(fmt.Sprintf("target: %s", m.forwarder.ActiveTarget())))
 
 	if m.updating {
 		parts = append(parts, m.styles.Subtle.Render("updating"))
