@@ -10,10 +10,12 @@ import (
 
 type Styles struct {
 	Title        lipgloss.Style
+	Popup        lipgloss.Style
 	Subtle       lipgloss.Style
 	Muted        lipgloss.Style
 	NodeSelected lipgloss.Style
 	NodeNormal   lipgloss.Style
+	Warn         lipgloss.Style
 	Error        lipgloss.Style
 	BarLabel     lipgloss.Style
 	Panel        lipgloss.Style
@@ -22,15 +24,17 @@ type Styles struct {
 
 func NewStyles() Styles {
 	return Styles{
-		Title:        lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("12")),
-		Subtle:       lipgloss.NewStyle().Foreground(lipgloss.Color("245")),
-		Muted:        lipgloss.NewStyle().Foreground(lipgloss.Color("240")),
-		NodeSelected: lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Background(lipgloss.Color("24")).Padding(0, 1),
+		Title:        lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#00ff00")),
+		Popup:        lipgloss.NewStyle().Foreground(lipgloss.Color("#ff82c0")), // TODO:
+		Subtle:       lipgloss.NewStyle().Foreground(lipgloss.Color("#8a8a8a")),
+		Muted:        lipgloss.NewStyle().Foreground(lipgloss.Color("#585858")),
+		NodeSelected: lipgloss.NewStyle().Foreground(lipgloss.Color("#ffffd7")).Background(lipgloss.Color("#005f87")).Padding(0, 1),
 		NodeNormal:   lipgloss.NewStyle().Padding(0, 1),
-		Error:        lipgloss.NewStyle().Foreground(lipgloss.Color("196")),
-		BarLabel:     lipgloss.NewStyle().Foreground(lipgloss.Color("250")),
-		Panel:        lipgloss.NewStyle().BorderStyle(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("238")).Padding(0, 1),
-		AppPanel:     lipgloss.NewStyle().BorderStyle(lipgloss.NormalBorder()).BorderForeground(lipgloss.NoColor{}).Padding(0, 1),
+		Warn:         lipgloss.NewStyle().Foreground(lipgloss.Color("#ffbf00")),
+		Error:        lipgloss.NewStyle().Foreground(lipgloss.Color("#ff3b30")),
+		BarLabel:     lipgloss.NewStyle().Foreground(lipgloss.Color("#bcbcbc")),
+		Panel:        lipgloss.NewStyle().BorderStyle(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("#44444")).Padding(0, 1),
+		AppPanel:     lipgloss.NewStyle().Padding(1),
 	}
 }
 
