@@ -218,7 +218,16 @@ func (m model) View() string {
 	header := title + lipgloss.PlaceHorizontal(contentWidth-lipgloss.Width(title), lipgloss.Right, status)
 
 	inputLine := m.renderInputBuffer()
-	subheader := inputLine + lipgloss.PlaceHorizontal(contentWidth-lipgloss.Width(inputLine), lipgloss.Right, m.styles.Muted.Render("? help"))
+
+	var helpMenu string
+	helpS := "?: help menu"
+	if m.mode == modeHelp {
+		helpMenu = m.styles.Popup.Render(helpS)
+	} else {
+		helpMenu = m.styles.Muted.Render(helpS)
+	}
+
+	subheader := inputLine + lipgloss.PlaceHorizontal(contentWidth-lipgloss.Width(inputLine), lipgloss.Right, helpMenu)
 
 	leftWidth := max(26, contentWidth/4)
 	rightWidth := max(40, contentWidth-leftWidth)
@@ -234,7 +243,7 @@ func (m model) statusLine() string {
 	parts := []string{}
 
 	if m.updating {
-		parts = append(parts, m.styles.Subtle.Render("updating"))
+		parts = append(parts, m.styles.Muted.Render("updating"))
 	}
 
 	if !m.lastUpdated.IsZero() {
@@ -445,11 +454,11 @@ func formatMB(bytes uint64) string {
 func (m model) renderInputBuffer() string {
 	switch m.mode {
 	case modeSortPrompt:
-		return m.styles.Subtle.Render("Sort by [n]ame, [u]sage, [l]imit")
+		return m.styles.Popup.Render(">> Sort by [n]ame, [u]sage, [l]imit")
 	case modeFilterPrompt:
-		return m.styles.Subtle.Render(fmt.Sprintf("Filter (Namespace/Pod):%s", m.filterInput))
+		return m.styles.Popup.Render(fmt.Sprintf(">> Filter (Namespace/Pod):%s", m.filterInput))
 	case modeHelp:
-		return m.styles.Subtle.Render("<Help Menu> j/k: move  s: sort  /: filter(live)  c: cpu  m: memory  Esc: cancel/close  q: quit")
+		return m.styles.Popup.Render("j/k: move  s: sort  /: filter(live)  c: cpu  m: memory  esc: cancel/close  q: quit")
 	default:
 		parts := []string{}
 		parts = append(parts, "view: "+m.resourceLabel())
