@@ -17,6 +17,7 @@ type Styles struct {
 	Error        lipgloss.Style
 	BarLabel     lipgloss.Style
 	Panel        lipgloss.Style
+	AppPanel     lipgloss.Style
 }
 
 func NewStyles() Styles {
@@ -29,6 +30,7 @@ func NewStyles() Styles {
 		Error:        lipgloss.NewStyle().Foreground(lipgloss.Color("196")),
 		BarLabel:     lipgloss.NewStyle().Foreground(lipgloss.Color("250")),
 		Panel:        lipgloss.NewStyle().BorderStyle(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("238")).Padding(0, 1),
+		AppPanel:     lipgloss.NewStyle().BorderStyle(lipgloss.NormalBorder()).BorderForeground(lipgloss.NoColor{}).Padding(0, 1),
 	}
 }
 

@@ -211,19 +211,24 @@ func (m model) View() string {
 		return "loading..."
 	}
 
-	header := m.styles.Title.Render("Kube-Thrifty") + "  " + m.statusLine()
+	contentWidth := max(0, m.width-m.styles.AppPanel.GetHorizontalFrameSize())
+
+	title := m.styles.Title.Render("Kube-Thrifty")
+	status := m.statusLine()
+	header := title + lipgloss.PlaceHorizontal(contentWidth-lipgloss.Width(title), lipgloss.Right, status)
+
 	menu := m.styles.Muted.Render("j/k navigate  q quit  s sort  / filter  c cpu  m memory  ? help")
 
 	inputLine := m.renderInputBuffer()
 
-	leftWidth := max(26, m.width/4)
-	rightWidth := max(40, m.width-leftWidth-3)
+	leftWidth := max(26, contentWidth/4)
+	rightWidth := max(40, contentWidth-leftWidth)
 
 	nodePanel := m.styles.Panel.Width(leftWidth - 2).Render(m.renderNodeList(leftWidth - 4))
 	detailPanel := m.styles.Panel.Width(rightWidth - 2).Render(m.renderDetails(rightWidth - 4))
 	body := lipgloss.JoinHorizontal(lipgloss.Top, nodePanel, detailPanel)
 
-	return lipgloss.JoinVertical(lipgloss.Left, header, menu, "", inputLine, body)
+	return m.styles.AppPanel.Render(lipgloss.JoinVertical(lipgloss.Left, header, menu, "", inputLine, body))
 }
 
 func (m model) statusLine() string {
