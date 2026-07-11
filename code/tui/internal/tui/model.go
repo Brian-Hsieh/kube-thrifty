@@ -247,7 +247,7 @@ func (m model) statusLine() string {
 	}
 
 	if !m.lastUpdated.IsZero() {
-		parts = append(parts, m.styles.Muted.Render("last: "+m.lastUpdated.Format("15:04:05")))
+		parts = append(parts, m.styles.Muted.Render("last updated: "+m.lastUpdated.Format(time.DateTime)))
 	}
 
 	if m.lastErr != "" {
@@ -330,7 +330,7 @@ func (m model) renderContainerTable(width int, nodeName string, title string, em
 
 	metricWidths := metricColumnWidths(columns)
 	metricWidth := metricColumnsWidth(metricWidths)
-	labelWidth := max(12, min(32, (width-metricWidth-1)/2))
+	labelWidth := max(12, min(60, (width-metricWidth-1)/2))
 	utilWidth := max(6, width-labelWidth-metricWidth-1)
 
 	lines := []string{
