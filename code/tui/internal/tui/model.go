@@ -30,7 +30,6 @@ const (
 	sortByName sortMode = iota
 	sortByUsage
 	sortByEfficiency
-	sortByLimit
 )
 
 type resourceMode int
@@ -168,10 +167,6 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.recomputeVisibleNodes()
 		case "u":
 			m.sortBy = sortByUsage
-			m.mode = modeNormal
-			m.recomputeVisibleNodes()
-		case "l":
-			m.sortBy = sortByLimit
 			m.mode = modeNormal
 			m.recomputeVisibleNodes()
 		}
@@ -459,9 +454,9 @@ func (m model) renderInputBuffer() string {
 	switch m.mode {
 	case modeSortPrompt:
 		if m.resource == resourceCPU {
-			return m.styles.Popup.Render(">> Sort by [e]fficiency, [u]sage of cpu, [l]imit, or press Enter for name") // cpu sorting prompt
+			return m.styles.Popup.Render(">> Sort by [e]fficiency, [u]sage of cpu, or press Enter for name") // cpu sorting prompt
 		}
-		return m.styles.Popup.Render(">> Sort by [e]fficiency, [u]sage of memory (wss), [l]imit, or press Enter for name") // mem sorting prompt
+		return m.styles.Popup.Render(">> Sort by [e]fficiency, [u]sage of memory (wss), or press Enter for name") // mem sorting prompt
 	case modeFilterPrompt:
 		return m.styles.Popup.Render(fmt.Sprintf(">> Filter (Namespace/Pod): %s", m.filterInput))
 	case modeHelp:
@@ -568,8 +563,6 @@ func (m model) sortLabel() string {
 			return "cpu rate"
 		}
 		return "working set bytes" // memory view
-	case sortByLimit:
-		return "limit"
 	default:
 		return "none"
 	}
@@ -621,21 +614,6 @@ func sortMemoryContainers(containers []api.Container, sortBy sortMode) []api.Con
 				return leftLabel < rightLabel
 			}
 			return left.MemUtilization > right.MemUtilization
-		case sortByLimit:
-			leftMax := left.Limits.MemoryByte
-			rightMax := right.Limits.MemoryByte
-			leftHasMax := leftMax > 0
-			rightHasMax := rightMax > 0
-			if leftHasMax != rightHasMax {
-				return leftHasMax
-			}
-			if !leftHasMax {
-				return leftLabel < rightLabel
-			}
-			if leftMax == rightMax {
-				return leftLabel < rightLabel
-			}
-			return leftMax > rightMax
 		default:
 			return false
 		}
@@ -682,21 +660,6 @@ func sortCPUContainers(containers []api.Container, sortBy sortMode) []api.Contai
 				return leftLabel < rightLabel
 			}
 			return left.CPUUtilization > right.CPUUtilization
-		case sortByLimit:
-			leftMax := left.Limits.CPUMillis
-			rightMax := right.Limits.CPUMillis
-			leftHasMax := leftMax > 0
-			rightHasMax := rightMax > 0
-			if leftHasMax != rightHasMax {
-				return leftHasMax
-			}
-			if !leftHasMax {
-				return leftLabel < rightLabel
-			}
-			if leftMax == rightMax {
-				return leftLabel < rightLabel
-			}
-			return leftMax > rightMax
 		default:
 			return false
 		}
