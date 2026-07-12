@@ -27,8 +27,7 @@ const (
 type sortMode int
 
 const (
-	sortNone sortMode = iota
-	sortByName
+	sortByName sortMode = iota
 	sortByUsage
 	sortByLimit
 )
@@ -83,7 +82,7 @@ func NewModel(forwarder *kube.Forwarder, interval time.Duration) tea.Model {
 		selected:  0,
 		updating:  true,
 		mode:      modeNormal,
-		sortBy:    sortNone,
+		sortBy:    sortByName,
 		resource:  resourceMemory,
 	}
 }
@@ -158,7 +157,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		switch strings.ToLower(msg.String()) {
 		case "esc":
 			m.mode = modeNormal
-		case "n":
+		case "enter":
 			m.sortBy = sortByName
 			m.mode = modeNormal
 			m.recomputeVisibleNodes()
@@ -454,15 +453,15 @@ func formatMB(bytes uint64) string {
 func (m model) renderInputBuffer() string {
 	switch m.mode {
 	case modeSortPrompt:
-		return m.styles.Popup.Render(">> Sort by [n]ame, [u]sage, [l]imit")
+		return m.styles.Popup.Render(">> Sort by [u]sage, [l]imit, or press Enter for name")
 	case modeFilterPrompt:
-		return m.styles.Popup.Render(fmt.Sprintf(">> Filter (Namespace/Pod):%s", m.filterInput))
+		return m.styles.Popup.Render(fmt.Sprintf(">> Filter (Namespace/Pod): %s", m.filterInput))
 	case modeHelp:
 		return m.styles.Popup.Render("j/k: move  s: sort  /: filter(live)  c: cpu  m: memory  esc: cancel/close  q: quit")
 	default:
 		parts := []string{}
 		parts = append(parts, "view: "+m.resourceLabel())
-		if m.sortBy != sortNone {
+		if m.sortBy != sortByName {
 			parts = append(parts, "sort: "+m.sortLabel())
 		}
 		if m.activeFilter != "" {
@@ -554,8 +553,6 @@ func (m *model) reselectNode() {
 
 func (m model) sortLabel() string {
 	switch m.sortBy {
-	case sortByName:
-		return "name"
 	case sortByUsage:
 		return "usage"
 	case sortByLimit:
