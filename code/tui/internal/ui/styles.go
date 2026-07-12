@@ -28,8 +28,8 @@ func NewStyles() Styles {
 		Popup:        lipgloss.NewStyle().Foreground(lipgloss.Color("#ff82c0")), // TODO:
 		Subtle:       lipgloss.NewStyle().Foreground(lipgloss.Color("#8a8a8a")),
 		Muted:        lipgloss.NewStyle().Foreground(lipgloss.Color("#585858")),
-		NodeSelected: lipgloss.NewStyle().Foreground(lipgloss.Color("#ffffd7")).Background(lipgloss.Color("#005f87")).Padding(0, 1),
-		NodeNormal:   lipgloss.NewStyle().Padding(0, 1),
+		NodeSelected: lipgloss.NewStyle().Foreground(lipgloss.Color("#00cc00")),
+		NodeNormal:   lipgloss.NewStyle().Foreground(lipgloss.Color("#8a8a8a")),
 		Warn:         lipgloss.NewStyle().Foreground(lipgloss.Color("#ffbf00")),
 		Error:        lipgloss.NewStyle().Foreground(lipgloss.Color("#ff3b30")),
 		BarLabel:     lipgloss.NewStyle().Foreground(lipgloss.Color("#bcbcbc")),

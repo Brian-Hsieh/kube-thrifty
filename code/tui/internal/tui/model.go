@@ -276,15 +276,16 @@ func (m model) renderNodeList(width int) string {
 		return m.styles.Subtle.Render("Waiting for metrics data...")
 	}
 
-	lines := make([]string, 0, len(m.visibleNodes)+1)
+	lines := make([]string, 0, len(m.visibleNodes)+2)
 	lines = append(lines, m.styles.Subtle.Render("Nodes"))
+	lines = append(lines, "")
 	for i, node := range m.visibleNodes {
 		line := node.Name
 		if len(line) > width && width > 3 {
 			line = line[:width-3] + "..."
 		}
 		if i == m.selected {
-			lines = append(lines, m.styles.NodeSelected.Render(line))
+			lines = append(lines, m.styles.NodeSelected.Render(line, "◀"))
 			continue
 		}
 		lines = append(lines, m.styles.NodeNormal.Render(line))
@@ -300,8 +301,9 @@ func (m model) renderNodeDetail() string {
 	node := m.visibleNodes[m.selected]
 	memUsed := bytesToMB(node.MemUsed)
 	memTotal := bytesToMB(node.MemTotal)
-	nodeDetail := fmt.Sprintf("Node Details\n\nNode: %s\nCPU usage: %.1f%%\nMemory usage (MB): %.1f/%.1f", node.Name, node.CPUPercent, memUsed, memTotal)
-	return m.styles.Subtle.Render(nodeDetail)
+	header := m.styles.Subtle.Render("Node Details")
+	nodeDetail := fmt.Sprintf("Node: %s\nCPU usage: %.1f%%\nMemory usage (MB): %.1f/%.1f", node.Name, node.CPUPercent, memUsed, memTotal)
+	return header + "\n\n" + m.styles.Subtle.Render(nodeDetail)
 }
 
 func (m model) renderContainerList(width int) string {
@@ -315,7 +317,6 @@ func (m model) renderContainerList(width int) string {
 		containers := sortCPUContainers(node.Containers, m.sortBy)
 		return m.renderContainerTable(
 			width,
-			node.Name,
 			"CPU",
 			"No container cpu data on selected node",
 			containers,
@@ -328,7 +329,6 @@ func (m model) renderContainerList(width int) string {
 	containers := sortMemoryContainers(node.Containers, m.sortBy)
 	return m.renderContainerTable(
 		width,
-		node.Name,
 		"Memory",
 		"No container memory data on selected node",
 		containers,
@@ -338,7 +338,7 @@ func (m model) renderContainerList(width int) string {
 		})
 }
 
-func (m model) renderContainerTable(width int, nodeName string, title string, emptyMessage string, containers []api.Container, columns []metricColumn, utilization func(api.Container) float64) string {
+func (m model) renderContainerTable(width int, title string, emptyMessage string, containers []api.Container, columns []metricColumn, utilization func(api.Container) float64) string {
 	if len(containers) == 0 {
 		return m.styles.Subtle.Render(emptyMessage)
 	}
@@ -349,7 +349,7 @@ func (m model) renderContainerTable(width int, nodeName string, title string, em
 	utilWidth := max(6, width-labelWidth-metricWidth-1)
 
 	lines := []string{
-		m.styles.Subtle.Render(fmt.Sprintf("%s on Node: %s", title, nodeName)),
+		m.styles.Subtle.Render(title),
 		"",
 		m.styles.Subtle.Render(renderTableHeader(labelWidth, utilWidth, columns, metricWidths)),
 		"",
