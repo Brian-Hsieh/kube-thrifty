@@ -228,12 +228,17 @@ func (m model) View() string {
 
 	subheader := inputLine + lipgloss.PlaceHorizontal(contentWidth-lipgloss.Width(inputLine), lipgloss.Right, helpMenu)
 
+	panelGap := 1
 	leftWidth := max(26, contentWidth/4)
-	rightWidth := max(40, contentWidth-leftWidth)
+	rightWidth := max(40, contentWidth-leftWidth-panelGap)
 
 	nodePanel := m.styles.Panel.Width(leftWidth - 2).Render(m.renderNodeList(leftWidth - 4))
-	detailPanel := m.styles.Panel.Width(rightWidth - 2).Render(m.renderDetails(rightWidth - 4))
-	body := lipgloss.JoinHorizontal(lipgloss.Top, nodePanel, detailPanel)
+	nodeDetailPanel := m.styles.Panel.Width(leftWidth - 2).Render(m.renderNodeDetail())
+	nodeBody := lipgloss.JoinVertical(lipgloss.Top, nodePanel, nodeDetailPanel)
+
+	detailPanel := m.styles.Panel.Width(rightWidth - 2).Render(m.renderContainerList(rightWidth - 4))
+
+	body := lipgloss.JoinHorizontal(lipgloss.Top, nodeBody, strings.Repeat(" ", panelGap), detailPanel)
 
 	return m.styles.AppPanel.Render(lipgloss.JoinVertical(lipgloss.Left, header, "", subheader, body))
 }
@@ -288,7 +293,18 @@ func (m model) renderNodeList(width int) string {
 	return strings.Join(lines, "\n")
 }
 
-func (m model) renderDetails(width int) string {
+func (m model) renderNodeDetail() string {
+	if len(m.visibleNodes) == 0 {
+		return ""
+	}
+	node := m.visibleNodes[m.selected]
+	memUsed := bytesToMB(node.MemUsed)
+	memTotal := bytesToMB(node.MemTotal)
+	nodeDetail := fmt.Sprintf("Node Details\n\nNode: %s\nCPU usage: %.1f%%\nMemory usage (MB): %.1f/%.1f", node.Name, node.CPUPercent, memUsed, memTotal)
+	return m.styles.Subtle.Render(nodeDetail)
+}
+
+func (m model) renderContainerList(width int) string {
 	if len(m.visibleNodes) == 0 {
 		return m.styles.Subtle.Render("No node selected")
 	}
