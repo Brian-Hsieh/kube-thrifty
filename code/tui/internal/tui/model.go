@@ -316,16 +316,9 @@ func (m model) renderNodeList(width int) string {
 	lines = append(lines, m.styles.Subtle.Render("Nodes"))
 	lines = append(lines, "")
 	for i, node := range m.visibleNodes {
-		line := node.Name
-		if len(line) > width && width > 3 {
-			line = line[:width-3] + "..."
-		}
+		line := truncate(node.Name, width)
 		if i == m.selectedNode {
-			if line[len(line)-1] == '.' {
-				line = line[:len(line)-1] + "◀"
-			} else {
-				line += " ◀"
-			}
+			line = addSelectedLabel(line)
 			lines = append(lines, m.styles.Selected.Render(line))
 			continue
 		}
@@ -396,9 +389,11 @@ func (m model) renderContainerTable(width int, title string, emptyMessage string
 			values = append(values, column.value(c))
 		}
 
-		labelS := fmt.Sprintf("%-*s", labelWidth, truncate(containerLabel(c), labelWidth))
+		truncatedLabel := truncate(containerLabel(c), labelWidth)
+		labelS := fmt.Sprintf("%-*s", labelWidth, truncatedLabel)
 		label := m.styles.BarLabel.Render(labelS)
 		if m.mode == modeDetail && i == m.selectedContainer {
+			labelS = fmt.Sprintf("%-*s", labelWidth, addSelectedLabel(truncatedLabel))
 			label = m.styles.Selected.Render(labelS)
 		}
 
@@ -473,6 +468,15 @@ func truncate(s string, width int) string {
 		return s
 	}
 	return s[:width-3] + "..."
+}
+
+func addSelectedLabel(s string) string {
+	if s[len(s)-1] == '.' {
+		s = s[:len(s)-1] + "◀"
+	} else {
+		s += " ◀"
+	}
+	return s
 }
 
 func formatUtilization(value float64, width int) string {
