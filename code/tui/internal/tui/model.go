@@ -19,6 +19,7 @@ type inputMode int
 
 const (
 	modeNormal inputMode = iota
+	modeDetail
 	modeSortPrompt
 	modeFilterPrompt
 	modeHelp
@@ -54,36 +55,39 @@ type metricColumn struct {
 type tickMsg struct{}
 
 type model struct {
-	forwarder        *kube.Forwarder
-	interval         time.Duration
-	styles           ui.Styles
-	nodes            []api.Node
-	visibleNodes     []api.Node
-	selected         int
-	selectedName     string
-	updating         bool
-	lastUpdated      time.Time
-	lastErr          string
-	mode             inputMode
-	sortBy           sortMode
-	filterInput      string
-	activeFilter     string
-	filterBeforeEdit string
-	resource         resourceMode
-	width            int
-	height           int
+	forwarder             *kube.Forwarder
+	interval              time.Duration
+	styles                ui.Styles
+	nodes                 []api.Node
+	visibleNodes          []api.Node
+	visibleContainers     []api.Container
+	selectedNode          int
+	selectedNodeName      string
+	selectedContainer     int
+	selectedContainerName string
+	updating              bool
+	lastUpdated           time.Time
+	lastErr               string
+	mode                  inputMode
+	sortBy                sortMode
+	filterInput           string
+	activeFilter          string
+	filterBeforeEdit      string
+	resource              resourceMode
+	width                 int
+	height                int
 }
 
 func NewModel(forwarder *kube.Forwarder, interval time.Duration) tea.Model {
 	return model{
-		forwarder: forwarder,
-		interval:  interval,
-		styles:    ui.NewStyles(),
-		selected:  0,
-		updating:  true,
-		mode:      modeNormal,
-		sortBy:    sortByName,
-		resource:  resourceMemory,
+		forwarder:    forwarder,
+		interval:     interval,
+		styles:       ui.NewStyles(),
+		selectedNode: 0,
+		updating:     true,
+		mode:         modeNormal,
+		sortBy:       sortByName,
+		resource:     resourceMemory,
 	}
 }
 
@@ -116,6 +120,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.lastUpdated = msg.fetchedAt
 		m.lastErr = ""
 		m.recomputeVisibleNodes()
+		m.recomputeVisibleContainers()
 		return m, nil
 	default:
 		return m, nil
@@ -131,14 +136,19 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case "j", "down":
 			if len(m.visibleNodes) > 0 {
-				m.selected = min(m.selected+1, len(m.visibleNodes)-1)
-				m.selectedName = m.visibleNodes[m.selected].Name
+				m.selectedNode = min(m.selectedNode+1, len(m.visibleNodes)-1)
+				m.selectedNodeName = m.visibleNodes[m.selectedNode].Name
 			}
+			m.recomputeVisibleContainers()
 		case "k", "up":
 			if len(m.visibleNodes) > 0 {
-				m.selected = max(m.selected-1, 0)
-				m.selectedName = m.visibleNodes[m.selected].Name
+				m.selectedNode = max(m.selectedNode-1, 0)
+				m.selectedNodeName = m.visibleNodes[m.selectedNode].Name
 			}
+			m.recomputeVisibleContainers()
+		case "enter":
+			m.mode = modeDetail
+			m.selectedContainer = 0
 		case "s":
 			m.mode = modeSortPrompt
 		case "/":
@@ -147,10 +157,28 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.filterInput = m.activeFilter
 		case "m":
 			m.resource = resourceMemory
+			m.recomputeVisibleContainers()
 		case "c":
 			m.resource = resourceCPU
+			m.recomputeVisibleContainers()
 		case "?":
 			m.mode = modeHelp
+		}
+		return m, nil
+	case modeDetail:
+		switch msg.String() {
+		case "j", "down":
+			if len(m.visibleContainers) > 0 {
+				m.selectedContainer = min(m.selectedContainer+1, len(m.visibleContainers)-1)
+				m.selectedContainerName = m.visibleContainers[m.selectedContainer].Name
+			}
+		case "k", "up":
+			if len(m.visibleContainers) > 0 {
+				m.selectedContainer = max(m.selectedContainer-1, 0)
+				m.selectedContainerName = m.visibleContainers[m.selectedContainer].Name
+			}
+		case "q":
+			m.mode = modeNormal
 		}
 		return m, nil
 	case modeSortPrompt:
@@ -161,14 +189,17 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.sortBy = sortByName
 			m.mode = modeNormal
 			m.recomputeVisibleNodes()
+			m.recomputeVisibleContainers()
 		case "e":
 			m.sortBy = sortByEfficiency
 			m.mode = modeNormal
 			m.recomputeVisibleNodes()
+			m.recomputeVisibleContainers()
 		case "u":
 			m.sortBy = sortByUsage
 			m.mode = modeNormal
 			m.recomputeVisibleNodes()
+			m.recomputeVisibleContainers()
 		}
 		return m, nil
 	case modeFilterPrompt:
@@ -178,19 +209,23 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.filterInput = m.filterBeforeEdit
 			m.mode = modeNormal
 			m.recomputeVisibleNodes()
+			m.recomputeVisibleContainers()
 		case "enter":
 			m.activeFilter = strings.TrimSpace(m.filterInput)
 			m.mode = modeNormal
 			m.recomputeVisibleNodes()
+			m.recomputeVisibleContainers()
 		case "backspace", "ctrl+h":
 			m.filterInput = trimLastRune(m.filterInput)
 			m.activeFilter = strings.TrimSpace(m.filterInput)
 			m.recomputeVisibleNodes()
+			m.recomputeVisibleContainers()
 		default:
 			if msg.Type == tea.KeyRunes {
 				m.filterInput += string(msg.Runes)
 				m.activeFilter = strings.TrimSpace(m.filterInput)
 				m.recomputeVisibleNodes()
+				m.recomputeVisibleContainers()
 			}
 		}
 		return m, nil
@@ -237,6 +272,7 @@ func (m model) View() string {
 	nodeBody := lipgloss.JoinVertical(lipgloss.Top, nodePanel, nodeDetailPanel)
 
 	detailPanel := m.styles.Panel.Width(rightWidth - 2).Render(m.renderContainerList(rightWidth - 4))
+	// TODO: render container details
 
 	body := lipgloss.JoinHorizontal(lipgloss.Top, nodeBody, strings.Repeat(" ", panelGap), detailPanel)
 
@@ -284,8 +320,13 @@ func (m model) renderNodeList(width int) string {
 		if len(line) > width && width > 3 {
 			line = line[:width-3] + "..."
 		}
-		if i == m.selected {
-			lines = append(lines, m.styles.NodeSelected.Render(line, "◀"))
+		if i == m.selectedNode {
+			if line[len(line)-1] == '.' {
+				line = line[:len(line)-1] + "◀"
+			} else {
+				line += " ◀"
+			}
+			lines = append(lines, m.styles.Selected.Render(line))
 			continue
 		}
 		lines = append(lines, m.styles.NodeNormal.Render(line))
@@ -298,7 +339,7 @@ func (m model) renderNodeDetail() string {
 	if len(m.visibleNodes) == 0 {
 		return m.styles.Subtle.Render("No node selected")
 	}
-	node := m.visibleNodes[m.selected]
+	node := m.visibleNodes[m.selectedNode]
 	memUsed := bytesToMB(node.MemUsed)
 	memTotal := bytesToMB(node.MemTotal)
 	header := m.styles.Subtle.Render("Node Details")
@@ -311,35 +352,29 @@ func (m model) renderContainerList(width int) string {
 		return m.styles.Subtle.Render("No node selected")
 	}
 
-	node := m.visibleNodes[m.selected]
-
 	if m.resource == resourceCPU {
-		containers := sortCPUContainers(node.Containers, m.sortBy)
 		return m.renderContainerTable(
 			width,
 			"CPU Overview",
 			"No container cpu data on selected node",
-			containers,
 			cpuMetricColumns(),
 			func(c api.Container) float64 {
 				return c.CPUUtilization
 			})
 	}
 
-	containers := sortMemoryContainers(node.Containers, m.sortBy)
 	return m.renderContainerTable(
 		width,
 		"Memory Overview",
 		"No container memory data on selected node",
-		containers,
 		memoryMetricColumns(),
 		func(c api.Container) float64 {
 			return c.MemUtilization
 		})
 }
 
-func (m model) renderContainerTable(width int, title string, emptyMessage string, containers []api.Container, columns []metricColumn, utilization func(api.Container) float64) string {
-	if len(containers) == 0 {
+func (m model) renderContainerTable(width int, title string, emptyMessage string, columns []metricColumn, utilization func(api.Container) float64) string {
+	if len(m.visibleContainers) == 0 {
 		return m.styles.Subtle.Render(emptyMessage)
 	}
 
@@ -355,21 +390,27 @@ func (m model) renderContainerTable(width int, title string, emptyMessage string
 		"",
 	}
 
-	for _, c := range containers {
+	for i, c := range m.visibleContainers {
 		values := make([]string, 0, len(columns))
 		for _, column := range columns {
 			values = append(values, column.value(c))
 		}
 
+		labelS := fmt.Sprintf("%-*s", labelWidth, truncate(containerLabel(c), labelWidth))
+		label := m.styles.BarLabel.Render(labelS)
+		if m.mode == modeDetail && i == m.selectedContainer {
+			label = m.styles.Selected.Render(labelS)
+		}
+
 		line := renderTableRow(
-			truncate(containerLabel(c), labelWidth),
+			"",
 			formatUtilization(utilization(c), utilWidth),
 			values,
-			labelWidth,
+			0,
 			utilWidth,
 			metricWidths,
 		)
-		lines = append(lines, m.styles.BarLabel.Render(line))
+		lines = append(lines, label+m.styles.BarLabel.Render(line))
 	}
 
 	return strings.Join(lines, "\n")
@@ -468,6 +509,8 @@ func formatMB(bytes uint64) string {
 
 func (m model) renderInputBuffer() string {
 	switch m.mode {
+	case modeDetail:
+		return m.styles.Popup.Render("Detail Mode: j/k to navigate container list, q to quit")
 	case modeSortPrompt:
 		if m.resource == resourceCPU {
 			return m.styles.Popup.Render(">> Sort by [e]fficiency, [u]sage of cpu, or press Enter for name") // cpu sorting prompt
@@ -552,22 +595,59 @@ func (m *model) recomputeVisibleNodes() {
 
 func (m *model) reselectNode() {
 	if len(m.visibleNodes) == 0 {
-		m.selected = 0
-		m.selectedName = ""
+		m.selectedNode = 0
+		m.selectedNodeName = ""
 		return
 	}
 
-	if m.selectedName != "" {
+	if m.selectedNodeName != "" {
 		for i, node := range m.visibleNodes {
-			if node.Name == m.selectedName {
-				m.selected = i
+			if node.Name == m.selectedNodeName {
+				m.selectedNode = i
 				return
 			}
 		}
 	}
 
-	m.selected = 0
-	m.selectedName = m.visibleNodes[0].Name
+	m.selectedNode = 0
+	m.selectedNodeName = m.visibleNodes[0].Name
+}
+
+func (m *model) recomputeVisibleContainers() {
+	if len(m.visibleNodes) == 0 {
+		m.visibleContainers = nil
+		m.selectedContainer = 0
+		m.selectedContainerName = ""
+		return
+	}
+	node := m.visibleNodes[m.selectedNode]
+	if m.resource == resourceCPU {
+		m.visibleContainers = sortCPUContainers(node.Containers, m.sortBy)
+	} else {
+		m.visibleContainers = sortMemoryContainers(node.Containers, m.sortBy)
+	}
+
+	m.reselectContainer()
+}
+
+func (m *model) reselectContainer() {
+	if len(m.visibleContainers) == 0 {
+		m.selectedContainer = 0
+		m.selectedContainerName = ""
+		return
+	}
+
+	if m.selectedContainerName != "" {
+		for i, node := range m.visibleContainers {
+			if node.Name == m.selectedContainerName {
+				m.selectedContainer = i
+				return
+			}
+		}
+	}
+
+	m.selectedContainer = 0
+	m.selectedContainerName = m.visibleContainers[0].Name
 }
 
 func (m model) sortLabel() string {
