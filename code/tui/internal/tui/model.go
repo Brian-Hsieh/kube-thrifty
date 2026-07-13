@@ -296,7 +296,7 @@ func (m model) renderNodeList(width int) string {
 
 func (m model) renderNodeDetail() string {
 	if len(m.visibleNodes) == 0 {
-		return ""
+		return m.styles.Subtle.Render("No node selected")
 	}
 	node := m.visibleNodes[m.selected]
 	memUsed := bytesToMB(node.MemUsed)
@@ -317,7 +317,7 @@ func (m model) renderContainerList(width int) string {
 		containers := sortCPUContainers(node.Containers, m.sortBy)
 		return m.renderContainerTable(
 			width,
-			"CPU",
+			"CPU Overview",
 			"No container cpu data on selected node",
 			containers,
 			cpuMetricColumns(),
@@ -329,7 +329,7 @@ func (m model) renderContainerList(width int) string {
 	containers := sortMemoryContainers(node.Containers, m.sortBy)
 	return m.renderContainerTable(
 		width,
-		"Memory",
+		"Memory Overview",
 		"No container memory data on selected node",
 		containers,
 		memoryMetricColumns(),
@@ -411,7 +411,7 @@ func renderTableHeader(labelWidth int, utilWidth int, columns []metricColumn, me
 	for _, column := range columns {
 		values = append(values, column.header)
 	}
-	return renderTableRow("ns/pod:container", "Utilization", values, labelWidth, utilWidth, metricWidths)
+	return renderTableRow("ns :: pod :: container", "Utilization", values, labelWidth, utilWidth, metricWidths)
 }
 
 func renderTableRow(label string, utilization string, values []string, labelWidth int, utilWidth int, metricWidths []int) string {
@@ -424,7 +424,7 @@ func renderTableRow(label string, utilization string, values []string, labelWidt
 }
 
 func containerLabel(c api.Container) string {
-	return fmt.Sprintf("%s/%s:%s", c.Namespace, c.PodName, c.Name)
+	return fmt.Sprintf("%s :: %s :: %s", c.Namespace, c.PodName, c.Name)
 }
 
 func truncate(s string, width int) string {
