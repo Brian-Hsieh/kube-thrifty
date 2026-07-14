@@ -20,7 +20,7 @@ import (
 )
 
 type resourceSpec struct {
-	CPUMillis  int64 `json:"cpu_millis`
+	CPUMillis  int64 `json:"cpu_millis"`
 	MemoryByte int64 `json:"memory_bytes"`
 }
 
@@ -34,7 +34,7 @@ type containerSnapshot struct {
 	MemResidentSet    uint64  `json:"mem_resident_set"`
 	OOM               uint64  `json:"oom"`
 
-	CPURate        float64 `json:"cpu_rate`
+	CPURate        float64 `json:"cpu_rate"`
 	CPUUtilization float64 `json:"cpu_utilization"`
 	MemUtilization float64 `json:"mem_utilization"`
 
