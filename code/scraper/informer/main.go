@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"io"
 	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"sync"
@@ -104,9 +105,11 @@ func (s *server) StreamMetrics(stream gen.MetricsScraper_StreamMetricsServer) er
 	for {
 		msg, err := stream.Recv()
 		if err == io.EOF {
+			slog.Error("Closed stream on EOF.")
 			return stream.SendAndClose(&gen.Ack{Ok: true})
 		}
 		if err != nil {
+			slog.Error("Closed stream on other error.")
 			return err
 		}
 

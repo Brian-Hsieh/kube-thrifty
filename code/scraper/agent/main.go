@@ -123,10 +123,12 @@ func toResourceSpec(rl corev1.ResourceList) resourceSpec {
 func buildClientset() (*kubernetes.Clientset, error) {
 	config, err := rest.InClusterConfig()
 	if err != nil {
+		slog.Error("Failed to get in-cluster config.")
 		return nil, err
 	}
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
+		slog.Error("Failed to create clientset from config.")
 		return nil, err
 	}
 	return clientset, nil
@@ -202,6 +204,7 @@ func newKubeletClient(nodeIP string) (*kubeletClient, error) {
 
 	config, err := rest.InClusterConfig()
 	if err != nil {
+		slog.Error("Failed to get in-cluster config.")
 		return nil, err
 	}
 
@@ -217,6 +220,7 @@ func (kc *kubeletClient) scrape(ctx context.Context) (map[string]*dto.MetricFami
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, kc.baseURL+"/metrics/cadvisor", nil)
 	if err != nil {
+		slog.Error("Failed to create Request for kubelet.")
 		return nil, err
 	}
 	if kc.token != "" {
@@ -224,6 +228,8 @@ func (kc *kubeletClient) scrape(ctx context.Context) (map[string]*dto.MetricFami
 	}
 	resp, err := kc.hc.Do(req)
 	if err != nil {
+		slog.Error("Failed to send request to kubelet.")
+		slog.Error(fmt.Sprintf("err: %v", err))
 		return nil, err
 	}
 	defer resp.Body.Close()
@@ -235,6 +241,7 @@ func (kc *kubeletClient) scrape(ctx context.Context) (map[string]*dto.MetricFami
 	parser := expfmt.NewTextParser(model.LegacyValidation)
 	all, err := parser.TextToMetricFamilies(resp.Body)
 	if err != nil {
+		slog.Error("Failed to parse raw Prometheus metrics text.")
 		return nil, err
 	}
 
@@ -344,7 +351,7 @@ func (a *agent) collect(ctx context.Context) (*gen.NodeSnapshot, error) {
 	// container-level
 	mfs, err := a.kc.scrape(ctx)
 	if err != nil {
-		log.Printf("warn: kubelet summary: %v", err)
+		slog.Warn("Fallback to empty metrics info.")
 		mfs = map[string]*dto.MetricFamily{}
 	}
 
@@ -429,6 +436,7 @@ func (a *agent) stream() error {
 
 	s, err := a.msClient.StreamMetrics(ctx, grpc.WaitForReady(true))
 	if err != nil {
+		slog.Error("Failed to create client streaming client")
 		return err
 	}
 
@@ -442,9 +450,11 @@ func (a *agent) stream() error {
 		cancel()
 
 		if err != nil {
+			slog.Error("Failed to collect metrics.")
 			return err
 		}
 		if err := s.Send(snap); err != nil {
+			slog.Error("Failed when sending snap to grpc server.")
 			return err
 		}
 	}
