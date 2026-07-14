@@ -128,6 +128,7 @@ func (s *server) StreamMetrics(stream gen.MetricsScraper_StreamMetricsServer) er
 				MemWorkingSet:     c.MemWss,
 				MemResidentSet:    c.MemRss,
 				OOM:               c.OomEvents,
+				CPURate:           c.CpuRate,
 				CPUUtilization:    c.CpuUtilization,
 				MemUtilization:    c.MemUtilization,
 				Requests: resourceSpec{
