@@ -271,10 +271,14 @@ func (m model) View() string {
 	nodeDetailPanel := m.styles.Panel.Width(leftWidth - 2).Render(m.renderNodeDetail())
 	nodeBody := lipgloss.JoinVertical(lipgloss.Top, nodePanel, nodeDetailPanel)
 
-	detailPanel := m.styles.Panel.Width(rightWidth - 2).Render(m.renderContainerList(rightWidth - 4))
-	// TODO: render container details
+	containerPanel := m.styles.Panel.Width(rightWidth - 2).Render(m.renderContainerList(rightWidth - 4))
+	containerDetailPanel := ""
+	if m.mode == modeDetail {
+		containerDetailPanel = m.styles.Panel.Width(rightWidth - 2).Render(m.renderContainerDetail())
+	}
+	containerBody := lipgloss.JoinVertical(lipgloss.Top, containerPanel, containerDetailPanel)
 
-	body := lipgloss.JoinHorizontal(lipgloss.Top, nodeBody, strings.Repeat(" ", panelGap), detailPanel)
+	body := lipgloss.JoinHorizontal(lipgloss.Top, nodeBody, strings.Repeat(" ", panelGap), containerBody)
 
 	return m.styles.AppPanel.Render(lipgloss.JoinVertical(lipgloss.Left, header, "", subheader, body))
 }
@@ -509,6 +513,68 @@ func formatRatioPercent(value float64) string {
 
 func formatMB(bytes uint64) string {
 	return fmt.Sprintf("%.1f", bytesToMB(bytes))
+}
+
+func (m model) renderContainerDetail() string {
+	container := m.visibleContainers[m.selectedContainer]
+
+	var s strings.Builder
+
+	s.WriteString("Container Details\n\n")
+	s.WriteString("Name: " + container.Name + "\n")
+	s.WriteString("Namespace: " + container.Namespace + "\n")
+	s.WriteString("Pod: " + container.PodName + "\n")
+
+	var msg strings.Builder
+
+	switch m.resource {
+	case resourceCPU:
+		utilization := container.CPUUtilization
+		if utilization == -1 {
+			s.WriteString("Utilization: N/A\n")
+		} else {
+			fmt.Fprintf(&s, "Utilization: %.1f%%\n", 100*utilization)
+		}
+		fmt.Fprintf(&s, "Rate: %f%%\n", 100*container.CPURate)
+		fmt.Fprintf(&s, "Throttle: %f%%\n", 100*container.CPUThrottledRatio)
+		fmt.Fprintf(&s, "Limit: %v\n", container.Limits.CPUMillis)
+		fmt.Fprintf(&s, "Request: %v", container.Requests.CPUMillis)
+		if utilization != -1 && utilization < 0.25 {
+			msg.WriteString("\nContainer might be overprovisioned.")
+		}
+		if container.Requests.CPUMillis == 0 {
+			msg.WriteString("\nConsider setting CPU resource requests.")
+		}
+		if container.Limits.CPUMillis == 0 {
+			msg.WriteString("\nConsider setting CPU resource limits.")
+		}
+	case resourceMemory:
+		utilization := container.MemUtilization
+		if utilization == -1 {
+			s.WriteString("Utilization: N/A\n")
+		} else {
+			fmt.Fprintf(&s, "Utilization: %.1f%%\n", 100*utilization)
+		}
+		fmt.Fprintf(&s, "WSS: %v\n", container.MemWorkingSet)
+		fmt.Fprintf(&s, "RSS: %v\n", container.MemResidentSet)
+		fmt.Fprintf(&s, "OOM events: %v\n", container.OOM)
+		fmt.Fprintf(&s, "Limit: %v\n", container.Limits.MemoryByte)
+		fmt.Fprintf(&s, "Request: %v", container.Requests.MemoryByte)
+		if utilization != -1 && utilization < 0.25 {
+			msg.WriteString("\nContainer might be overprovisioned.")
+		}
+		if container.Requests.MemoryByte == 0 {
+			msg.WriteString("\nConsider setting memeory resource requests.")
+		}
+		if container.Limits.MemoryByte == 0 {
+			msg.WriteString("\nConsider setting memory resource limits.")
+		}
+	}
+
+	if len(msg.String()) != 0 {
+		return m.styles.Subtle.Render(s.String()) + "\n" + m.styles.Warn.Render(msg.String())
+	}
+	return m.styles.Subtle.Render(s.String())
 }
 
 func (m model) renderInputBuffer() string {
