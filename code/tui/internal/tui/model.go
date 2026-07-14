@@ -600,17 +600,16 @@ func (m model) renderInputBuffer() string {
 		return m.styles.Popup.Render("j/k: move  s: sort  /: filter(live)  c: cpu  m: memory  esc: cancel/close  q: quit")
 	default:
 		parts := []string{}
-		parts = append(parts, "view: "+m.resourceLabel())
 		if m.sortBy != sortByName {
-			parts = append(parts, "sort: "+m.sortLabel())
+			parts = append(parts, "sorted: "+m.sortLabel())
 		}
 		if m.activeFilter != "" {
-			parts = append(parts, "filter: "+m.activeFilter)
+			parts = append(parts, "filtered: "+m.activeFilter)
 		}
 		if len(parts) == 0 {
-			return m.styles.Muted.Render("")
+			return ""
 		}
-		return m.styles.Muted.Render(strings.Join(parts, "  |  "))
+		return m.styles.Popup.Render(strings.Join(parts, "  |  "))
 	}
 }
 
@@ -740,14 +739,6 @@ func (m model) sortLabel() string {
 	default:
 		return "none"
 	}
-}
-
-func (m model) resourceLabel() string {
-	if m.resource == resourceCPU {
-		return "cpu"
-	}
-
-	return "memory"
 }
 
 func sortMemoryContainers(containers []api.Container, sortBy sortMode) []api.Container {
