@@ -177,6 +177,12 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.selectedContainer = max(m.selectedContainer-1, 0)
 				m.selectedContainerName = m.visibleContainers[m.selectedContainer].Name
 			}
+		case "m":
+			m.resource = resourceMemory
+			m.recomputeVisibleContainers()
+		case "c":
+			m.resource = resourceCPU
+			m.recomputeVisibleContainers()
 		case "q":
 			m.mode = modeNormal
 		}
@@ -582,7 +588,7 @@ func (m model) renderContainerDetail() string {
 func (m model) renderInputBuffer() string {
 	switch m.mode {
 	case modeDetail:
-		return m.styles.Popup.Render("Detail Mode: j/k to navigate container list, q to quit")
+		return m.styles.Popup.Render("Detail Mode: j/k to navigate container list, c for cpu, m for memory, q to quit")
 	case modeSortPrompt:
 		if m.resource == resourceCPU {
 			return m.styles.Popup.Render(">> Sort by [e]fficiency, [u]sage of cpu, or press Enter for name") // cpu sorting prompt
