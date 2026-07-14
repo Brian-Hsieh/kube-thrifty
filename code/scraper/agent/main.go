@@ -383,14 +383,10 @@ func (a *agent) collect(ctx context.Context) (*gen.NodeSnapshot, error) {
 
 		cs, hasSpec := a.sc.get(k)
 		if hasSpec {
-			requests = &gen.ResourceSpec{
-				CpuMillis:   cs.request.cpuMilli,
-				MemoryBytes: cs.request.memoryByte,
-			}
-			limits = &gen.ResourceSpec{
-				CpuMillis:   cs.limit.cpuMilli,
-				MemoryBytes: cs.limit.memoryByte,
-			}
+			requests.CpuMillis = cs.request.cpuMilli
+			requests.MemoryBytes = cs.request.memoryByte
+			limits.CpuMillis = cs.limit.cpuMilli
+			limits.MemoryBytes = cs.limit.memoryByte
 		}
 
 		cpuRateMillis := a.ch.rate(k, usage, time.Now())
