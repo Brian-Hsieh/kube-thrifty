@@ -493,8 +493,9 @@ func formatUtilization(value float64, width int) string {
 		return fmt.Sprintf("%-*s", width, percent)
 	}
 
-	barWidth := max(10, width-len(percent)-1)
-	return fmt.Sprintf("%-*s", width, fmt.Sprintf("%s %s", ui.ProgressBar(value, barWidth), percent))
+	percentWidth := 5
+	barWidth := max(10, width-percentWidth-1)
+	return fmt.Sprintf("%-*s", width, fmt.Sprintf("%s %*s", ui.ProgressBar(value, barWidth), percentWidth, percent))
 }
 
 func formatCPURate(rate float64) string {
@@ -524,6 +525,7 @@ func (m model) renderContainerDetail() string {
 	s.WriteString("Name: " + container.Name + "\n")
 	s.WriteString("Namespace: " + container.Namespace + "\n")
 	s.WriteString("Pod: " + container.PodName + "\n")
+	s.WriteString("-----\n")
 
 	var msg strings.Builder
 
