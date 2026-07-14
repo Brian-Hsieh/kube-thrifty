@@ -535,7 +535,7 @@ func (m model) renderContainerDetail() string {
 		} else {
 			fmt.Fprintf(&s, "Utilization: %.1f%%\n", 100*utilization)
 		}
-		fmt.Fprintf(&s, "Rate: %f%%\n", 100*container.CPURate)
+		fmt.Fprintf(&s, "Rate: %f\n", container.CPURate)
 		fmt.Fprintf(&s, "Throttle: %f%%\n", 100*container.CPUThrottledRatio)
 		fmt.Fprintf(&s, "Limit: %v\n", container.Limits.CPUMillis)
 		fmt.Fprintf(&s, "Request: %v", container.Requests.CPUMillis)
