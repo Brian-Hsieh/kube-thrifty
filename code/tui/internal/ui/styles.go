@@ -33,7 +33,7 @@ func NewStyles() Styles {
 		Warn:       lipgloss.NewStyle().Foreground(lipgloss.Color("#ffbf00")),
 		Error:      lipgloss.NewStyle().Foreground(lipgloss.Color("#ff3b30")),
 		BarLabel:   lipgloss.NewStyle().Foreground(lipgloss.Color("#bcbcbc")),
-		Panel:      lipgloss.NewStyle().BorderStyle(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("#44444")).Padding(0, 1),
+		Panel:      lipgloss.NewStyle().BorderStyle(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("#444444")).Padding(0, 1),
 		AppPanel:   lipgloss.NewStyle().Padding(1),
 	}
 }
