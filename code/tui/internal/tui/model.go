@@ -171,12 +171,14 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case "j", "down":
 			if len(m.visibleContainers) > 0 {
 				m.selectedContainer = min(m.selectedContainer+1, len(m.visibleContainers)-1)
-				m.selectedContainerName = m.visibleContainers[m.selectedContainer].Name
+				c := m.visibleContainers[m.selectedContainer]
+				m.selectedContainerName = c.PodName + c.Name
 			}
 		case "k", "up":
 			if len(m.visibleContainers) > 0 {
 				m.selectedContainer = max(m.selectedContainer-1, 0)
-				m.selectedContainerName = m.visibleContainers[m.selectedContainer].Name
+				c := m.visibleContainers[m.selectedContainer]
+				m.selectedContainerName = c.PodName + c.Name
 			}
 		case "m":
 			m.resource = resourceMemory
@@ -769,7 +771,7 @@ func (m *model) reselectContainer() {
 
 	if m.selectedContainerName != "" {
 		for i, node := range m.visibleContainers {
-			if node.Name == m.selectedContainerName {
+			if node.PodName+node.Name == m.selectedContainerName {
 				m.selectedContainer = i
 				return
 			}
@@ -777,7 +779,8 @@ func (m *model) reselectContainer() {
 	}
 
 	m.selectedContainer = 0
-	m.selectedContainerName = m.visibleContainers[0].Name
+	c := m.visibleContainers[0]
+	m.selectedContainerName = c.PodName + c.Name
 }
 
 func (m model) sortLabel() string {
