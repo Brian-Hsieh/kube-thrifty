@@ -9,32 +9,34 @@ import (
 )
 
 type Styles struct {
-	Title      lipgloss.Style
-	Popup      lipgloss.Style
-	Subtle     lipgloss.Style
-	Muted      lipgloss.Style
-	Selected   lipgloss.Style
-	NodeNormal lipgloss.Style
-	Warn       lipgloss.Style
-	Error      lipgloss.Style
-	BarLabel   lipgloss.Style
-	Panel      lipgloss.Style
-	AppPanel   lipgloss.Style
+	Title          lipgloss.Style
+	Popup          lipgloss.Style
+	Subtle         lipgloss.Style
+	Muted          lipgloss.Style
+	Selected       lipgloss.Style
+	NodeNormal     lipgloss.Style
+	Warn           lipgloss.Style
+	Error          lipgloss.Style
+	BarLabel       lipgloss.Style
+	Panel          lipgloss.Style
+	InvisiblePanel lipgloss.Style
+	AppPanel       lipgloss.Style
 }
 
 func NewStyles() Styles {
 	return Styles{
-		Title:      lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#00ff00")),
-		Popup:      lipgloss.NewStyle().Foreground(lipgloss.Color("#ff82c0")), // TODO:
-		Subtle:     lipgloss.NewStyle().Foreground(lipgloss.Color("#8a8a8a")),
-		Muted:      lipgloss.NewStyle().Foreground(lipgloss.Color("#585858")),
-		Selected:   lipgloss.NewStyle().Foreground(lipgloss.Color("#00cc00")),
-		NodeNormal: lipgloss.NewStyle().Foreground(lipgloss.Color("#8a8a8a")),
-		Warn:       lipgloss.NewStyle().Foreground(lipgloss.Color("#ffbf00")),
-		Error:      lipgloss.NewStyle().Foreground(lipgloss.Color("#ff3b30")),
-		BarLabel:   lipgloss.NewStyle().Foreground(lipgloss.Color("#bcbcbc")),
-		Panel:      lipgloss.NewStyle().BorderStyle(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("#444444")).Padding(0, 1),
-		AppPanel:   lipgloss.NewStyle().Padding(1),
+		Title:          lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#00ff00")),
+		Popup:          lipgloss.NewStyle().Foreground(lipgloss.Color("#ff82c0")), // TODO:
+		Subtle:         lipgloss.NewStyle().Foreground(lipgloss.Color("#8a8a8a")),
+		Muted:          lipgloss.NewStyle().Foreground(lipgloss.Color("#585858")),
+		Selected:       lipgloss.NewStyle().Foreground(lipgloss.Color("#00cc00")),
+		NodeNormal:     lipgloss.NewStyle().Foreground(lipgloss.Color("#8a8a8a")),
+		Warn:           lipgloss.NewStyle().Foreground(lipgloss.Color("#ffbf00")),
+		Error:          lipgloss.NewStyle().Foreground(lipgloss.Color("#ff3b30")),
+		BarLabel:       lipgloss.NewStyle().Foreground(lipgloss.Color("#bcbcbc")),
+		Panel:          lipgloss.NewStyle().BorderStyle(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("#444444")).Padding(0, 1),
+		InvisiblePanel: lipgloss.NewStyle(),
+		AppPanel:       lipgloss.NewStyle().Padding(1),
 	}
 }
 

@@ -9,6 +9,7 @@ import (
 
 	"kube-thrifty/tui/internal/api"
 	"kube-thrifty/tui/internal/kube"
+	"kube-thrifty/tui/internal/lib"
 	"kube-thrifty/tui/internal/ui"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -280,7 +281,16 @@ func (m model) View() string {
 	containerPanel := m.styles.Panel.Width(rightWidth - 2).Render(m.renderContainerList(rightWidth - 4))
 	containerDetailPanel := ""
 	if m.mode == modeDetail {
-		containerDetailPanel = m.styles.Panel.Width(rightWidth - 2).Render(m.renderContainerDetail())
+		title := m.styles.Subtle.Render("Container Details\n")
+		containerDetail := m.styles.InvisiblePanel.Width((rightWidth-4)/2 - 2).Render(m.renderContainerDetail())
+		containerUtilDetail := m.styles.InvisiblePanel.Width((rightWidth-4)/2 - 2).Render(m.renderContainerUtilDetail())
+		detail := lipgloss.JoinHorizontal(lipgloss.Top, containerDetail, containerUtilDetail)
+		msg := m.renderContainerMsg()
+		if lipgloss.Width(msg) != 0 {
+			containerDetailPanel = m.styles.Panel.Width(rightWidth - 2).Render(lipgloss.JoinVertical(lipgloss.Left, title, detail, msg))
+		} else {
+			containerDetailPanel = m.styles.Panel.Width(rightWidth - 2).Render(lipgloss.JoinVertical(lipgloss.Left, title, detail))
+		}
 	}
 	containerBody := lipgloss.JoinVertical(lipgloss.Top, containerPanel, containerDetailPanel)
 
@@ -525,31 +535,41 @@ func formatMB(bytes uint64) string {
 func (m model) renderContainerDetail() string {
 	container := m.visibleContainers[m.selectedContainer]
 
-	var s strings.Builder
+	var detail strings.Builder
 
-	s.WriteString("Container Details\n\n")
-	s.WriteString("Name: " + container.Name + "\n")
-	s.WriteString("Namespace: " + container.Namespace + "\n")
-	s.WriteString("Pod: " + container.PodName + "\n")
-	s.WriteString("-----\n")
-
-	var msg strings.Builder
+	detail.WriteString("Name: " + container.Name + "\n")
+	detail.WriteString("Namespace: " + container.Namespace + "\n")
+	detail.WriteString("Pod: " + container.PodName + "\n")
+	detail.WriteString("-----\n")
 
 	switch m.resource {
 	case resourceCPU:
-		utilization := container.CPUUtilization
-		if utilization == -1 {
-			s.WriteString("Utilization: N/A\n")
-		} else {
-			fmt.Fprintf(&s, "Utilization: %.1f%%\n", 100*utilization)
-		}
-		fmt.Fprintf(&s, "Rate: %f\n", container.CPURate)
-		fmt.Fprintf(&s, "Throttle: %f%%\n", 100*container.CPUThrottledRatio)
-		fmt.Fprintf(&s, "Limit: %v\n", container.Limits.CPUMillis)
-		fmt.Fprintf(&s, "Request: %v", container.Requests.CPUMillis)
-		if utilization != -1 && utilization < 0.25 {
-			msg.WriteString("\nContainer might be overprovisioned.")
-		}
+		fmt.Fprintf(&detail, "Limit: %v\n", container.Limits.CPUMillis)
+		fmt.Fprintf(&detail, "Request: %v", container.Requests.CPUMillis)
+
+		fmt.Fprintf(&detail, "Rate: %f\n", container.CPURate)
+		fmt.Fprintf(&detail, "Throttle: %f%%\n", 100*container.CPUThrottledRatio)
+	case resourceMemory:
+		fmt.Fprintf(&detail, "Limit: %v\n", container.Limits.MemoryByte)
+		fmt.Fprintf(&detail, "Request: %v\n", container.Requests.MemoryByte)
+
+		detail.WriteString("-----\n")
+		fmt.Fprintf(&detail, "WSS: %v\n", container.MemWorkingSet)
+		fmt.Fprintf(&detail, "RSS: %v\n", container.MemResidentSet)
+		fmt.Fprintf(&detail, "OOM events: %v", container.OOM)
+	}
+
+	return m.styles.Subtle.Render(detail.String())
+}
+
+func (m model) renderContainerMsg() string {
+	container := m.visibleContainers[m.selectedContainer]
+
+	var msg strings.Builder
+	var utilHistory []float64
+	switch m.resource {
+	case resourceCPU:
+		utilHistory = container.CPUUtilizationHistory
 		if container.Requests.CPUMillis == 0 {
 			msg.WriteString("\nConsider setting CPU resource requests.")
 		}
@@ -557,20 +577,7 @@ func (m model) renderContainerDetail() string {
 			msg.WriteString("\nConsider setting CPU resource limits.")
 		}
 	case resourceMemory:
-		utilization := container.MemUtilization
-		if utilization == -1 {
-			s.WriteString("Utilization: N/A\n")
-		} else {
-			fmt.Fprintf(&s, "Utilization: %.1f%%\n", 100*utilization)
-		}
-		fmt.Fprintf(&s, "WSS: %v\n", container.MemWorkingSet)
-		fmt.Fprintf(&s, "RSS: %v\n", container.MemResidentSet)
-		fmt.Fprintf(&s, "OOM events: %v\n", container.OOM)
-		fmt.Fprintf(&s, "Limit: %v\n", container.Limits.MemoryByte)
-		fmt.Fprintf(&s, "Request: %v", container.Requests.MemoryByte)
-		if utilization != -1 && utilization < 0.25 {
-			msg.WriteString("\nContainer might be overprovisioned.")
-		}
+		utilHistory = container.MemUtilizationHistory
 		if container.Requests.MemoryByte == 0 {
 			msg.WriteString("\nConsider setting memeory resource requests.")
 		}
@@ -578,11 +585,57 @@ func (m model) renderContainerDetail() string {
 			msg.WriteString("\nConsider setting memory resource limits.")
 		}
 	}
-
-	if len(msg.String()) != 0 {
-		return m.styles.Subtle.Render(s.String()) + "\n" + m.styles.Warn.Render(msg.String())
+	_, _, meanV, err := fMinMaxMean(utilHistory)
+	if err == nil && meanV < 0.25 {
+		msg.WriteString("\nContainer might be overprovisioned.")
 	}
-	return m.styles.Subtle.Render(s.String())
+	return m.styles.Warn.Render(msg.String())
+}
+
+func (m model) renderContainerUtilDetail() string {
+	container := m.visibleContainers[m.selectedContainer]
+
+	var utilization float64
+	var utilHistory []float64
+
+	if m.resource == resourceCPU {
+		utilization = container.CPUUtilization
+		utilHistory = container.CPUUtilizationHistory
+	} else {
+		utilization = container.MemUtilization
+		utilHistory = container.MemUtilizationHistory
+	}
+
+	if utilization == -1 {
+		return ""
+	}
+
+	title := "Utilization History"
+	info := "(past 5 mins)"
+
+	var detail strings.Builder
+
+	bg := lib.NewBrailleGraph(30, 5, 0.0, 1.0)
+	bg.SetYAxis()
+	bg.SetYLabel(0.0, "0")
+	bg.SetYLabel(1.0, "100")
+	graph := bg.Plot(utilHistory)
+
+	detail.WriteString(graph)
+	detail.WriteString("\n\n")
+
+	minV, maxV, meanV, err := fMinMaxMean(utilHistory)
+	if err == nil {
+		fmt.Fprintf(&detail, "%-17s", fmt.Sprintf("Instant: %.2f%%", 100*utilization))
+		fmt.Fprintf(&detail, "%17s\n", fmt.Sprintf("Min: %.2f%%", 100*minV))
+		fmt.Fprintf(&detail, "%-17s", fmt.Sprintf("Avg:     %.2f%%", 100*meanV)) // hacky alignment to Instant: ...
+		fmt.Fprintf(&detail, "%17s", fmt.Sprintf("Max: %.2f%%", 100*maxV))
+	}
+
+	return lipgloss.JoinVertical(lipgloss.Left,
+		m.styles.Subtle.Render(title)+" "+m.styles.Muted.Render(info),
+		"",
+		m.styles.Subtle.Render(detail.String()))
 }
 
 func (m model) renderInputBuffer() string {
@@ -843,4 +896,20 @@ func trimLastRune(s string) string {
 		return s
 	}
 	return string(r[:len(r)-1])
+}
+
+// slices.Min and Max would panic if empty list and i don't want that
+func fMinMaxMean(data []float64) (float64, float64, float64, error) {
+	if len(data) == 0 {
+		return 0, 0, 0, fmt.Errorf("data is empty")
+	}
+	minV := data[0]
+	maxV := data[0]
+	sum := 0.0
+	for _, d := range data[1:] {
+		minV = min(minV, d)
+		maxV = max(maxV, d)
+		sum += d
+	}
+	return minV, maxV, sum / float64(len(data)), nil
 }
