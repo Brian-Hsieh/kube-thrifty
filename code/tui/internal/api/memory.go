@@ -39,6 +39,9 @@ type Container struct {
 
 	Requests ResourceSpec `json:"requests"`
 	Limits   ResourceSpec `json:"limits"`
+
+	CPUUtilizationHistory []float64 `json:"cpu_utilization_history"`
+	MemUtilizationHistory []float64 `json:"mem_utilization_history"`
 }
 
 var defaultHTTPClient = &http.Client{Timeout: 5 * time.Second}

@@ -39,6 +39,10 @@ message ContainerMetrics {
   // k8s resource spec
   ResourceSpec limits = 12;
   ResourceSpec requests = 13;
+
+  // utilizaiton history
+  repeated double cpu_utilization_history = 14;
+  repeated double mem_utilization_history = 15;
 }
 
 message ResourceSpec {

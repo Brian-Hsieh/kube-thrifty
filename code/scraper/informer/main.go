@@ -41,6 +41,9 @@ type containerSnapshot struct {
 
 	Requests resourceSpec `json:"requests"`
 	Limits   resourceSpec `json:"limits"`
+
+	CPUUtilizationHistory []float64 `json:"cpu_utilization_history"`
+	MemUtilizationHistory []float64 `json:"mem_utilization_history"`
 }
 
 type nodeSnapshot struct {
@@ -142,6 +145,8 @@ func (s *server) StreamMetrics(stream gen.MetricsScraper_StreamMetricsServer) er
 					CPUMillis:  c.Limits.CpuMillis,
 					MemoryByte: c.Limits.MemoryBytes,
 				},
+				CPUUtilizationHistory: c.CpuUtilizationHistory,
+				MemUtilizationHistory: c.MemUtilizationHistory,
 			})
 		}
 

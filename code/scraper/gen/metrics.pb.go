@@ -123,10 +123,13 @@ type ContainerMetrics struct {
 	CpuUtilization float64 `protobuf:"fixed64,10,opt,name=cpu_utilization,json=cpuUtilization,proto3" json:"cpu_utilization,omitempty"`
 	MemUtilization float64 `protobuf:"fixed64,11,opt,name=mem_utilization,json=memUtilization,proto3" json:"mem_utilization,omitempty"`
 	// k8s resource spec
-	Limits        *ResourceSpec `protobuf:"bytes,12,opt,name=limits,proto3" json:"limits,omitempty"`
-	Requests      *ResourceSpec `protobuf:"bytes,13,opt,name=requests,proto3" json:"requests,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Limits   *ResourceSpec `protobuf:"bytes,12,opt,name=limits,proto3" json:"limits,omitempty"`
+	Requests *ResourceSpec `protobuf:"bytes,13,opt,name=requests,proto3" json:"requests,omitempty"`
+	// utilizaiton history
+	CpuUtilizationHistory []float64 `protobuf:"fixed64,14,rep,packed,name=cpu_utilization_history,json=cpuUtilizationHistory,proto3" json:"cpu_utilization_history,omitempty"`
+	MemUtilizationHistory []float64 `protobuf:"fixed64,15,rep,packed,name=mem_utilization_history,json=memUtilizationHistory,proto3" json:"mem_utilization_history,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *ContainerMetrics) Reset() {
@@ -250,6 +253,20 @@ func (x *ContainerMetrics) GetRequests() *ResourceSpec {
 	return nil
 }
 
+func (x *ContainerMetrics) GetCpuUtilizationHistory() []float64 {
+	if x != nil {
+		return x.CpuUtilizationHistory
+	}
+	return nil
+}
+
+func (x *ContainerMetrics) GetMemUtilizationHistory() []float64 {
+	if x != nil {
+		return x.MemUtilizationHistory
+	}
+	return nil
+}
+
 type ResourceSpec struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	CpuMillis     int64                  `protobuf:"varint,1,opt,name=cpu_millis,json=cpuMillis,proto3" json:"cpu_millis,omitempty"`
@@ -360,7 +377,7 @@ const file_metrics_proto_rawDesc = "" +
 	"\ttimestamp\x18\x05 \x01(\x03R\ttimestamp\x129\n" +
 	"\n" +
 	"containers\x18\x06 \x03(\v2\x19.metrics.ContainerMetricsR\n" +
-	"containers\"\xee\x03\n" +
+	"containers\"\xde\x04\n" +
 	"\x10ContainerMetrics\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x19\n" +
 	"\bpod_name\x18\x02 \x01(\tR\apodName\x12%\n" +
@@ -376,7 +393,9 @@ const file_metrics_proto_rawDesc = "" +
 	" \x01(\x01R\x0ecpuUtilization\x12'\n" +
 	"\x0fmem_utilization\x18\v \x01(\x01R\x0ememUtilization\x12-\n" +
 	"\x06limits\x18\f \x01(\v2\x15.metrics.ResourceSpecR\x06limits\x121\n" +
-	"\brequests\x18\r \x01(\v2\x15.metrics.ResourceSpecR\brequests\"P\n" +
+	"\brequests\x18\r \x01(\v2\x15.metrics.ResourceSpecR\brequests\x126\n" +
+	"\x17cpu_utilization_history\x18\x0e \x03(\x01R\x15cpuUtilizationHistory\x126\n" +
+	"\x17mem_utilization_history\x18\x0f \x03(\x01R\x15memUtilizationHistory\"P\n" +
 	"\fResourceSpec\x12\x1d\n" +
 	"\n" +
 	"cpu_millis\x18\x01 \x01(\x03R\tcpuMillis\x12!\n" +

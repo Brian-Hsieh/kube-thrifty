@@ -1,3 +1,4 @@
+// TODO: rewrite comments for executable
 // Package agent implements runtime to scrape resource information of the node in k8s cluster, and sends
 // scraped information to informer.
 //
@@ -33,9 +34,48 @@ import (
 	"k8s.io/client-go/tools/cache"
 )
 
+// TODO: to be extracted
+type RingBuffer[T any] struct {
+	data     []T
+	capacity int
+	size     int
+	head     int
+}
+
+func NewRingBuffer[T any](capacity int) *RingBuffer[T] {
+	if capacity <= 0 {
+		panic("capacity must be greater than zero.")
+	}
+	return &RingBuffer[T]{
+		data:     make([]T, capacity),
+		capacity: capacity,
+	}
+}
+
+func (rb *RingBuffer[T]) Add(dp T) {
+	rb.data[rb.head] = dp
+	rb.size = min(rb.size+1, rb.capacity)
+	rb.head = (rb.head + 1) % rb.capacity
+}
+
+func (rb *RingBuffer[T]) GetData() []T {
+	data := make([]T, rb.size)
+	s := 0
+	if rb.size == rb.capacity {
+		s = rb.head
+	}
+	for i := 0; i < rb.size; i++ {
+		data[i] = rb.data[(s+i)%rb.capacity]
+	}
+	return data
+}
+
 var profiler *utils.Profiler
 
-const ScrapeInterval = 10 * time.Second
+const (
+	ScrapeInterval = 10 * time.Second
+	RingBufferCap  = 30
+)
 
 const (
 	ContainerCPUUsage     string = "container_cpu_usage_seconds_total"
@@ -326,12 +366,31 @@ func (ch *cpuHistory) rate(k string, usage float64, t time.Time) float64 {
 	return (usage - prev.usage) / duration * 1000
 }
 
+type utilHistory struct {
+	data map[string]*RingBuffer[float64]
+}
+
+func NewUtilHistory() *utilHistory {
+	return &utilHistory{data: make(map[string]*RingBuffer[float64])}
+}
+
+func (uh *utilHistory) get(key string) *RingBuffer[float64] {
+	rb, ok := uh.data[key]
+	if !ok {
+		rb = NewRingBuffer[float64](RingBufferCap)
+		uh.data[key] = rb
+	}
+	return rb
+}
+
 type agent struct {
-	msClient gen.MetricsScraperClient
-	nodeName string
-	kc       *kubeletClient
-	sc       *specCache
-	ch       *cpuHistory
+	msClient    gen.MetricsScraperClient
+	nodeName    string
+	kc          *kubeletClient
+	sc          *specCache
+	ch          *cpuHistory
+	cpuUtilHist *utilHistory
+	memUtilHist *utilHistory
 }
 
 func (a *agent) collect(ctx context.Context) (*gen.NodeSnapshot, error) {
@@ -394,31 +453,38 @@ func (a *agent) collect(ctx context.Context) (*gen.NodeSnapshot, error) {
 		cpuUtilization := -1.0
 		memUtilization := -1.0
 
+		cpuRB := a.cpuUtilHist.get(k)
+		memRB := a.memUtilHist.get(k)
+
 		// TODO: we could add oom risk as well
 		// oom rish makes sense when limits is set
 		// otherwise, use node memeory for denominator
 		// probably use additional flag to let frontend knows the result is not realistic
 		if cpuRateMillis >= 0 && cs.request.cpuMilli > 0 {
 			cpuUtilization = cpuRateMillis / float64(cs.request.cpuMilli)
+			cpuRB.Add(cpuUtilization)
 		}
 		if cs.request.memoryByte > 0 {
 			memUtilization = memWSS[k] / float64(cs.request.memoryByte)
+			memRB.Add(memUtilization)
 		}
 
 		cm := &gen.ContainerMetrics{
-			Namespace:         ns,
-			PodName:           pod,
-			ContainerName:     c,
-			CpuUsageSeconds:   usage,
-			CpuThrottledRatio: throttledRatio,
-			MemWss:            uint64(memWSS[k]),
-			MemRss:            uint64(memRSS[k]),
-			OomEvents:         uint64(oom[k]),
-			CpuRate:           cpuRateMillis,
-			CpuUtilization:    cpuUtilization,
-			MemUtilization:    memUtilization,
-			Requests:          requests,
-			Limits:            limits,
+			Namespace:             ns,
+			PodName:               pod,
+			ContainerName:         c,
+			CpuUsageSeconds:       usage,
+			CpuThrottledRatio:     throttledRatio,
+			MemWss:                uint64(memWSS[k]),
+			MemRss:                uint64(memRSS[k]),
+			OomEvents:             uint64(oom[k]),
+			CpuRate:               cpuRateMillis,
+			CpuUtilization:        cpuUtilization,
+			MemUtilization:        memUtilization,
+			Requests:              requests,
+			Limits:                limits,
+			CpuUtilizationHistory: cpuRB.GetData(),
+			MemUtilizationHistory: memRB.GetData(),
 		}
 
 		snap.Containers = append(snap.Containers, cm)
@@ -518,11 +584,13 @@ func main() {
 	}
 
 	agent := &agent{
-		msClient: msClient,
-		nodeName: nodeName,
-		kc:       kc,
-		sc:       sc,
-		ch:       newCPUHistory(),
+		msClient:    msClient,
+		nodeName:    nodeName,
+		kc:          kc,
+		sc:          sc,
+		ch:          newCPUHistory(),
+		cpuUtilHist: NewUtilHistory(),
+		memUtilHist: NewUtilHistory(),
 	}
 
 	for {
