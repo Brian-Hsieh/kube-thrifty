@@ -1,9 +1,9 @@
 mode: prod
 agent:
   image:
-    repo: "kube-thrifty-agent"
-    tag: "v1.0.1"
+    repo: "brianhdevv/kube-thrifty-agent"
+    tag: "latest"
 informer:
   image:
-    repo: "kube-thrifty-informer"
-    tag: "v1.0.1"
+    repo: "brianhdevv/kube-thrifty-informer"
+    tag: "latest"

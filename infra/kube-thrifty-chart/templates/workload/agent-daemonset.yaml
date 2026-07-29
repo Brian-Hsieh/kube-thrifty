@@ -23,7 +23,7 @@ spec:
       containers:
         - name: agent
           image: "{{ .Values.agent.image.repo }}:{{ .Values.agent.image.tag}}"
-          imagePullPolicy: Never
+          imagePullPolicy: IfNotPresent
           env:
             - name: INFORMER_ADDR
               value: "{{ .Release.Name }}-metrics-service.{{ .Release.Namespace }}.svc.cluster.local:50051"

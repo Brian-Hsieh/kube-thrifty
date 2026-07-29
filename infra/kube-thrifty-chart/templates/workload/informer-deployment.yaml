@@ -16,7 +16,7 @@ spec:
       containers:
         - name: informer
           image: "{{ .Values.informer.image.repo }}:{{ .Values.informer.image.tag}}"
-          imagePullPolicy: Never
+          imagePullPolicy: IfNotPresent
           ports:
             - name: grpc
               containerPort: 50051
