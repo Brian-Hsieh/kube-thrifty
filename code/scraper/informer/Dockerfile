@@ -5,7 +5,7 @@ WORKDIR /app
 COPY go.mod go.sum ./ 
 RUN go mod download
 
-# copy generated proto binary and agent source
+# copy generated protobuf and informer source
 COPY gen/ ./gen/
 COPY informer/main.go ./informer/main.go
 

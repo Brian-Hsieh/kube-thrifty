@@ -1,9 +1,17 @@
-// Package informer implements runtime to gather resource information of all nodes in k8s cluster, and serves
-// the information.
+// Informer implements runtime to gather resource information of all nodes in k8s cluster,
+// and serves the information via HTTP.
 //
-// The informer package should be used in in-cluster settings with functioning inter-node communication,
-// and there should only be one runtime at a given time in cluster.
-// It should be used together with agent package for proper grpc communication in cluster.
+// It uses gRPC to establish connection from agent on each node and aggregate information in its cache.
+// The gathered information switches from the pre-defined gPRC schema in proto/metrics.proto to
+// the other schema here for serving through HTTP.
+//
+// The exposed HTTP endpoints are:
+//   - "/ready": serves for readiness probing
+//   - "/v3/metrics": serves the gathered information from all nodes and containers
+//
+// Informer should be used together with Agent for proper data streaming,
+// and it should be used within k8s cluster with proper inter-node communication.
+// There should only be one Informer runtime at a given time in cluster.
 package main
 
 import (

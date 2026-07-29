@@ -1,9 +1,13 @@
-// TODO: rewrite comments for executable
-// Package agent implements runtime to scrape resource information of the node in k8s cluster, and sends
-// scraped information to informer.
+// Agent implements runtime to scrape resource information of the node in k8s cluster, and sends
+// information to the aggregator, Informer.
 //
-// The agent package should be used in in-cluster settings with functioning inter-node communication.
-// It should be used together with informer package for proper grpc communication in cluster.
+// Internally, Agent uses cAdvisor to obtain container resource metrics via the Kubelet API.
+// After data post-processing, it utilizes gRPC to stream scraped information at a fixed interval of 10 sec.
+// Since cAdvisor in k8s updates its internal cache roughly 10-20 sec, there is no point going faster.
+// The streamed information follows the pre-defined gRPC schema in proto/metrics.proto.
+//
+// Agent should be used together with Informer for proper data streaming,
+// and it should be used within k8s cluster with proper inter-node communication.
 package main
 
 import (
