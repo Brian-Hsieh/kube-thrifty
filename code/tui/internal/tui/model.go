@@ -3,13 +3,14 @@ package tui
 import (
 	"context"
 	"fmt"
+	"sort"
+	"strings"
+	"time"
+
 	"kube-thrifty/tui/internal/api"
 	"kube-thrifty/tui/internal/kube"
 	"kube-thrifty/tui/internal/lib"
 	"kube-thrifty/tui/internal/ui"
-	"sort"
-	"strings"
-	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -546,10 +547,11 @@ func (m model) renderContainerDetail() string {
 	switch m.resource {
 	case resourceCPU:
 		fmt.Fprintf(&detail, "Limit: %v\n", container.Limits.CPUMillis)
-		fmt.Fprintf(&detail, "Request: %v", container.Requests.CPUMillis)
+		fmt.Fprintf(&detail, "Request: %v\n", container.Requests.CPUMillis)
 
+		detail.WriteString("-----\n")
 		fmt.Fprintf(&detail, "Rate: %f\n", container.CPURate)
-		fmt.Fprintf(&detail, "Throttle: %f%%\n", 100*container.CPUThrottledRatio)
+		fmt.Fprintf(&detail, "Throttle: %f%%", 100*container.CPUThrottledRatio)
 	case resourceMemory:
 		fmt.Fprintf(&detail, "Limit: %v\n", container.Limits.MemoryByte)
 		fmt.Fprintf(&detail, "Request: %v\n", container.Requests.MemoryByte)
