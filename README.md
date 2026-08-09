@@ -2,7 +2,8 @@
 
 Kube-Thrifty is a Kubernetes resource monitor TUI. It collects CPU and memory metrics of containers on all nodes, compares container usage with resource requests, and highlights containers that may be overprovisioned.
 
-Kube-Thrifty is read-only. It does not modify workloads, requests, or limits.
+> [!NOTE]
+> Kube-Thrifty is read-only. It does not modify workloads, requests, or limits.
 
 ## Features
 
@@ -18,7 +19,7 @@ Kube-Thrifty is read-only. It does not modify workloads, requests, or limits.
 
 ![Diagram](./docs/images/Architecture.png)
 
-The agent runs on every node, scrapes metrics every 10 seconds, and streams them to the informer via Service. The informer aggregates snapshots from nodes, caches it, and serves it through HTTP. The local TUI finds the informer Service through your kubeconfig and polls its HTTP API every five seconds.
+The agent runs on every node, scrapes metrics every 10 seconds, and streams them to the informer via the Service. The informer aggregates snapshots from nodes, caches them, and serves them through HTTP. The local TUI finds the informer Service through your kubeconfig and polls its HTTP API every five seconds.
 
 ## Prerequisites
 
@@ -27,12 +28,12 @@ The agent runs on every node, scrapes metrics every 10 seconds, and streams them
 - [Helm 3](https://helm.sh/)
 - [Go 1.26.2](https://go.dev/) to build or run the TUI from source
 
-> [!Note]
-> Your Kubernetes identity should be able to reach the API server, read the Kube-Thrifty Service and pods, and open pod port-forward connections.
+> [!IMPORTANT]
+> Your Kubernetes identity must have permission to read the Kube-Thrifty Service and Pods, and open port-forward connections to Pods.
 
 ## Quick Start
 
-Install kube-thrifty from repository root:
+Install Kube-Thrifty from repository root:
 
 ```sh
 helm install kube-thrifty ./infra/kube-thrifty-chart \
@@ -54,8 +55,8 @@ cd code/tui
 go run .
 ```
 
-> [!Note]
-> The release name and namespace must currently both be `kube-thrifty`. TUI uses the Service name and namespace directly.
+> [!IMPORTANT]
+> The Helm release name and namespace must currently both be `kube-thrifty`, as TUI directly references the Service by name and namespace.
 
 ## Controls
 
@@ -72,11 +73,11 @@ go run .
 | `q` | Return from details or quit from the main view |
 | `Ctrl-C` | Quit |
 
-At the sorting prompt, press `e` for efficiency (utilization), `u` for usage (Working set byte for memory view; CPU rate for CPU view), or `Enter` for name (default).
+At the sorting prompt, press `e` for efficiency (utilization), `u` for usage (Working-set bytes for memory view; CPU rate for CPU view), or `Enter` for name (default).
 
-Utilization is calculcated as the ratio between CPU rate or Working set byte and the corresponding container's resource request. Containers without a request display `N/A`. A container is marked as potentially overprovisioned when its historical average utilization is below 25%.
+Utilization is calculated as the ratio between CPU rate or working-set bytes and the corresponding container's resource request. Containers without a request display `N/A`. A container is marked as potentially overprovisioned when its historical average utilization is below 25%.
 
-## Helm Configurations
+## Helm Configuration
 
 | Value | Default | Description |
 | --- | --- | --- |
@@ -111,11 +112,11 @@ The chart deploys:
 
 ## Current Limitations
 
-- Removed nodes are not automatically updated in TUI and are not removed from informer cache.
-- The informer runs as a single replica.
+- Removed nodes are not automatically updated in TUI and are not removed from Informer cache.
+- The Informer runs as a single replica.
 - Release name and namespace are fixed for TUI discovery.
-- Agent-to-informer gRPC is unencrypted inside the cluster.
-- Kubelet TLS certificates are not verified by the agent.
+- Agent-to-Informer gRPC is unencrypted inside the cluster.
+- Kubelet TLS certificates are not verified by the Agent.
 - The chart defaults to `latest` image tags.
 
 ## License
