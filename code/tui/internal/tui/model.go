@@ -3,14 +3,13 @@ package tui
 import (
 	"context"
 	"fmt"
-	"sort"
-	"strings"
-	"time"
-
 	"kube-thrifty/tui/internal/api"
 	"kube-thrifty/tui/internal/kube"
 	"kube-thrifty/tui/internal/lib"
 	"kube-thrifty/tui/internal/ui"
+	"sort"
+	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -677,7 +676,7 @@ func (m model) fetchCmd() tea.Cmd {
 			return fetchResultMsg{err: fmt.Errorf("port-forward unavailable: %w", err)}
 		}
 
-		nodes, err := api.FetchMemory(ctx, m.forwarder.LocalPort())
+		nodes, err := api.FetchMetrics(ctx, m.forwarder.LocalPort())
 		if err != nil {
 			return fetchResultMsg{err: err}
 		}
