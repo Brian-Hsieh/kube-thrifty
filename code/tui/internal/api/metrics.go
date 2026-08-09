@@ -46,7 +46,7 @@ type Container struct {
 
 var defaultHTTPClient = &http.Client{Timeout: 5 * time.Second}
 
-func FetchMemory(ctx context.Context, localPort int) ([]Node, error) {
+func FetchMetrics(ctx context.Context, localPort int) ([]Node, error) {
 	if localPort <= 0 {
 		return nil, fmt.Errorf("invalid local port")
 	}
