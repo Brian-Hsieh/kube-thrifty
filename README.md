@@ -2,6 +2,8 @@
 
 Kube-Thrifty is a Kubernetes resource monitor TUI. It collects CPU and memory metrics of containers on all nodes, compares container usage with resource requests, and highlights containers that may be overprovisioned.
 
+![Demo](./docs/images/kt-demo.gif)
+
 > [!NOTE]
 > Kube-Thrifty is read-only. It does not modify workloads, requests, or limits.
 
